@@ -14,6 +14,11 @@ body {
 
 /* Print CSS Styles for professional A4 worksheets */
 @media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
   /* Hide all interactive app layout containers */
   #app-sidebar,
   aside,
@@ -28,7 +33,7 @@ body {
     display: none !important;
   }
 
-  /* Reset outer shell formatting */
+  /* Reset outer shell formatting to allow vertical expansion */
   html, body {
     background: #ffffff !important;
     background-color: #ffffff !important;
@@ -36,18 +41,29 @@ body {
     margin: 0 !important;
     padding: 0 !important;
     width: 210mm !important;
-    height: 297mm !important;
+    height: auto !important;
+    min-height: 100% !important;
     overflow: visible !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  #root {
+  /* Force all React app wrapper parent layouts to expand fully without hiding overflow */
+  #root,
+  #root > div,
+  #root > div > div,
+  #root > div > div > main {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: relative !important;
+    width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
-    width: 100% !important;
-    height: auto !important;
-    overflow: visible !important;
+    box-shadow: none !important;
+    border: none !important;
   }
 
   /* Make worksheets grid span full printable sheet */
