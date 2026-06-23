@@ -1,5 +1,5 @@
 import { Lesson, Unit, UserProfile } from '../types';
-import { curriculumUnits, diagramConfigs, mockMatchingData, diagramConfigs as allDiagrams, mockMatchingData as allMatches } from '../data/curriculumData';
+import { curriculumUnits, diagramConfigs, mockMatchingData, diagramConfigs as allDiagrams, mockMatchingData as allMatches, questionPool } from '../data/curriculumData';
 import { Sparkles, Printer, FileText, Download, CheckSquare, Settings, Lock, Unlock, Eye, HelpCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState, useRef, FormEvent } from 'react';
@@ -86,59 +86,59 @@ export default function WorksheetGenerator({
 
       const staticTFPool = [
         // Standard + Easy
-        { text: 'أي عدد نضربه في صفر، يكون الناتج دائماً صفراً.', correct: 'صح', isReal: false, diff: 'easy' },
-        { text: 'يكتب العدد (سبعة عشر) بالأرقام هكذا: 17', correct: 'صح', isReal: false, diff: 'easy' },
-        { text: 'اليوم الكامل يحتوي على 24 ساعة.', correct: 'صح', isReal: false, diff: 'easy' },
+        { text: 'أي عدد نضربه في صفر، يكون الناتج دائماً صفراً.', correct: 'صح', isReal: false, diff: 'easy', unitId: 'unit2', lessonId: 'u2-l1' },
+        { text: 'يكتب العدد (سبعة عشر) بالأرقام هكذا: 17', correct: 'صح', isReal: false, diff: 'easy', unitId: 'unit1', lessonId: 'u1-l1' },
+        { text: 'اليوم الكامل يحتوي على 24 ساعة.', correct: 'صح', isReal: false, diff: 'easy', unitId: 'unit5', lessonId: 'u5-l2' },
 
         // Real-World + Easy
-        { text: 'إذا كان مع أحمد 5 تفاحات وأعطى أخته 3 تفاحات، يتبقى معه تفاحتان اثنتان.', correct: 'صح', isReal: true, diff: 'easy' },
-        { text: 'ثمن قطعة الحلوى 5 جنيهات، إذا اشتريت قطعتين تدفع 15 جنيهاً.', correct: 'خطأ', isReal: true, diff: 'easy' },
+        { text: 'إذا كان مع أحمد 5 تفاحات وأعطى أخته 3 تفاحات، يتبقى معه تفاحتان اثنتان.', correct: 'صح', isReal: true, diff: 'easy', unitId: 'unit1', lessonId: 'u1-l3' },
+        { text: 'ثمن قطعة الحلوى 5 جنيهات، إذا اشتريت قطعتين تدفع 15 جنيهاً.', correct: 'خطأ', isReal: true, diff: 'easy', unitId: 'unit2', lessonId: 'u2-l2' },
 
         // Standard + Medium
-        { text: 'يكتب العدد (ألفان وثلاثة وسبعون) بالأرقام هكذا: 2073', correct: 'صح', isReal: false, diff: 'medium' },
-        { text: 'المستطيل هو شكل رباعي فيه كل أضلاعه الأربعة متساوية تماماً في الطول.', correct: 'خطأ', isReal: false, diff: 'medium' },
-        { text: 'عند ضرب أي عدد في 100، نكتب نفس العدد ونضع صفرين على يمينه.', correct: 'صح', isReal: false, diff: 'medium' },
+        { text: 'يكتب العدد (ألفان وثلاثة وسبعون) بالأرقام هكذا: 2073', correct: 'صح', isReal: false, diff: 'medium', unitId: 'unit1', lessonId: 'u1-l1' },
+        { text: 'المستطيل هو شكل رباعي فيه كل أضلاعه الأربعة متساوية تماماً في الطول.', correct: 'خطأ', isReal: false, diff: 'medium', unitId: 'unit6', lessonId: 'u6-l2' },
+        { text: 'عند ضرب أي عدد في 100، نكتب نفس العدد ونضع صفرين على يمينه.', correct: 'صح', isReal: false, diff: 'medium', unitId: 'unit2', lessonId: 'u2-l5' },
 
         // Real-World + Medium
-        { text: 'اشترى علي 3 كراسات رسم، إذا كان ثمن الكراسة 6 جنيهات، يدفع للبائع 18 جنيهاً.', correct: 'صح', isReal: true, diff: 'medium' },
-        { text: 'وزعت فاطمة 20 حبة تمر على 4 من صديقاتها بالتساوي، نصيب كل واحدة هو 5 تمرات.', correct: 'صح', isReal: true, diff: 'medium' },
+        { text: 'اشترى علي 3 كراسات رسم، إذا كان ثمن الكراسة 6 جنيهات، يدفع للبائع 18 جنيهاً.', correct: 'صح', isReal: true, diff: 'medium', unitId: 'unit2', lessonId: 'u2-l2' },
+        { text: 'وزعت فاطمة 20 حبة تمر على 4 من صديقاتها بالتساوي، نصيب كل واحدة هو 5 تمرات.', correct: 'صح', isReal: true, diff: 'medium', unitId: 'unit3', lessonId: 'u3-l1' },
 
         // Standard + Hard
-        { text: 'الكسر 1/2 (النصف) أصغر من الكسر 1/4 (الربع) لأن الرقم 4 أكبر من 2.', correct: 'خطأ', isReal: false, diff: 'hard' },
-        { text: 'الخط المستقيم له نقطة بداية ونقطة نهاية محددة.', correct: 'خطأ', isReal: false, diff: 'hard' },
+        { text: 'الكسر 1/2 (النصف) أصغر من الكسر 1/4 (الربع) لأن الرقم 4 أكبر من 2.', correct: 'خطأ', isReal: false, diff: 'hard', unitId: 'unit4', lessonId: 'u4-l3' },
+        { text: 'الخط المستقيم له نقطة بداية ونقطة نهاية محددة.', correct: 'خطأ', isReal: false, diff: 'hard', unitId: 'unit6', lessonId: 'u6-l1' },
 
         // Real-World + Hard
-        { text: 'يمشي عداء مسافة ميل واحد يومياً، وهو ما يعادل 1760 ياردة تماماً.', correct: 'صح', isReal: true, diff: 'hard' },
-        { text: 'إذا كان في خزان اللبن 5/6 السعة وتم بيع 1/6 السعة، يتبقى في الخزان ثلث السعة.', correct: 'خطأ', isReal: true, diff: 'hard' }
+        { text: 'يمشي عداء مسافة ميل واحد يومياً، وهو ما يعادل 1760 ياردة تماماً.', correct: 'صح', isReal: true, diff: 'hard', unitId: 'unit5', lessonId: 'u5-l1' },
+        { text: 'إذا كان في خزان اللبن 5/6 السعة وتم بيع 1/6 السعة، يتبقى في الخزان ثلث السعة.', correct: 'خطأ', isReal: true, diff: 'hard', unitId: 'unit4', lessonId: 'u4-l3' }
       ];
 
       const staticFillPool = [
         // Standard + Easy
-        { text: 'احسب ناتج الجمع البسيط: 5 + 4 = ........', correct: '9', isReal: false, diff: 'easy' },
-        { text: 'العدد الفردي الذي يلي العدد 7 مباشرة هو ........', correct: '9', isReal: false, diff: 'easy' },
+        { text: 'احسب ناتج الجمع البسيط: 5 + 4 = ........', correct: '9', isReal: false, diff: 'easy', unitId: 'unit1', lessonId: 'u1-l3' },
+        { text: 'العدد الفردي الذي يلي العدد 7 مباشرة هو ........', correct: '9', isReal: false, diff: 'easy', unitId: 'unit1', lessonId: 'u1-l1' },
 
         // Real-World + Easy
-        { text: 'مع أحمد 10 جنيهات، اشترى عصير بـ 6 جنيهات، بقي معه ........ جنيهات.', correct: '4', isReal: true, diff: 'easy' },
-        { text: 'في علبة التلوين 6 أقلام، في علبتين متطابقتين يوجد ........ قلماً.', correct: '12', isReal: true, diff: 'easy' },
+        { text: 'مع أحمد 10 جنيهات، اشترى عصير بـ 6 جنيهات، بقي معه ........ جنيهات.', correct: '4', isReal: true, diff: 'easy', unitId: 'unit1', lessonId: 'u1-l4' },
+        { text: 'في علبة التلوين 6 أقلام، في علبتين متطابقتين يوجد ........ قلماً.', correct: '12', isReal: true, diff: 'easy', unitId: 'unit2', lessonId: 'u2-l1' },
 
         // Standard + Medium
-        { text: 'احسب ناتج الجمع التالي: 4126 + 1872 = ........', correct: '5998', isReal: false, diff: 'medium' },
-        { text: 'احسب ناتج الطرح التالي: 5628 - 1313 = ........', correct: '4315', isReal: false, diff: 'medium' },
-        { text: '9 × 9 = ........', correct: '81', isReal: false, diff: 'medium' },
+        { text: 'احسب ناتج الجمع التالي: 4126 + 1872 = ........', correct: '5998', isReal: false, diff: 'medium', unitId: 'unit1', lessonId: 'u1-l3' },
+        { text: 'احسب ناتج الطرح التالي: 5628 - 1313 = ........', correct: '4315', isReal: false, diff: 'medium', unitId: 'unit1', lessonId: 'u1-l4' },
+        { text: '9 × 9 = ........', correct: '81', isReal: false, diff: 'medium', unitId: 'unit2', lessonId: 'u2-l4' },
 
         // Real-World + Medium
-        { text: 'وزع أب 35 جنيها بالتساوي على 5 من أبنائه، نصيب كل ابن هو ........ جنيهات.', correct: '7', isReal: true, diff: 'medium' },
-        { text: 'تضع أمي 7 قطع بسكويت في كل طبق، في 6 أطباق تضع ........ قطعة بسكويت.', correct: '42', isReal: true, diff: 'medium' },
+        { text: 'وزع أب 35 جنيها بالتساوي على 5 من أبنائه، نصيب كل ابن هو ........ جنيهات.', correct: '7', isReal: true, diff: 'medium', unitId: 'unit3', lessonId: 'u3-l4' },
+        { text: 'تضع أمي 7 قطع بسكويت في كل طبق، في 6 أطباق تضع ........ قطعة بسكويت.', correct: '42', isReal: true, diff: 'medium', unitId: 'unit2', lessonId: 'u2-l2' },
 
         // Standard + Hard
-        { text: 'القدم الواحد يحتوي على ........ بوصة.', correct: '12', isReal: false, diff: 'hard' },
-        { text: 'ربع الساعة يحتوي على ........ دقيقة.', correct: '15', isReal: false, diff: 'hard' },
-        { text: 'المثلث له ........ أضلاع و ........ رؤوس.', correct: '3 أضلاع و 3 رؤوس', isReal: false, diff: 'hard' },
-        { text: 'في الكسر 3/4 ، يسمى الرقم 3 بالـ ........ والرقم 4 بالـ ........', correct: 'البسط ، المقام', isReal: false, diff: 'hard' },
+        { text: 'القدم الواحد يحتوي على ........ بوصة.', correct: '12', isReal: false, diff: 'hard', unitId: 'unit5', lessonId: 'u5-l1' },
+        { text: 'ربع الساعة يحتوي على ........ دقيقة.', correct: '15', isReal: false, diff: 'hard', unitId: 'unit5', lessonId: 'u5-l2' },
+        { text: 'المثلث له ........ أضلاع و ........ رؤوس.', correct: '3 أضلاع و 3 رؤوس', isReal: false, diff: 'hard', unitId: 'unit6', lessonId: 'u6-l2' },
+        { text: 'في الكسر 3/4 ، يسمى الرقم 3 بالـ ........ والرقم 4 بالـ ........', correct: 'البسط ، المقام', isReal: false, diff: 'hard', unitId: 'unit4', lessonId: 'u4-l1' },
 
         // Real-World + Hard
-        { text: 'اشترى النور سجادة مستطيلة طولها 4 أمتار وعرضها 2 متر، محيط هذه السجادة يساوي ........ أمتار.', correct: '12', isReal: true, diff: 'hard' },
-        { text: 'إذا قطف مزارع 952 برتقالة ووزعها بالتساوي على 7 صناديق، تحتوي كل منها على ........ برتقالة.', correct: '136', isReal: true, diff: 'hard' }
+        { text: 'اشترى النور سجادة مستطيلة طولها 4 أمتار وعرضها 2 متر، محيط هذه السجادة يساوي ........ أمتار.', correct: '12', isReal: true, diff: 'hard', unitId: 'unit6', lessonId: 'u6-l2' },
+        { text: 'إذا قطف مزارع 952 برتقالة ووزعها بالتساوي على 7 صناديق، تحتوي كل منها على ........ برتقالة.', correct: '136', isReal: true, diff: 'hard', unitId: 'unit3', lessonId: 'u3-l4' }
       ];
 
       const staticMatchingBlocks = [
@@ -173,156 +173,435 @@ export default function WorksheetGenerator({
       ];
 
       const extendedDiagrams = [
-        ...allDiagrams,
         {
-          id: 'diagram-geometry',
-          title: 'مكونات الأشكال الهندسية ومحيطها',
-          image: 'geometry',
+          id: 'diagram-abacus',
+          title: 'مكونات العداد (المعداد)',
+          image: 'abacus',
+          unitId: 'unit1',
           labels: [
-            { id: '1', name: 'المستطيل (الطول والعرض)', x: 30, y: 35 },
-            { id: '2', name: 'المربع (أضلاع متطابقة)', x: 70, y: 35 },
-            { id: '3', name: 'المثلث (ثلاث زوايا)', x: 50, y: 75 }
+            { id: '1', name: 'خانة الألوف', x: 20, y: 30 },
+            { id: '2', name: 'خانة المئات', x: 40, y: 30 },
+            { id: '3', name: 'خانة العشرات', x: 60, y: 30 },
+            { id: '4', name: 'خانة الآحاد', x: 80, y: 30 }
           ]
         },
         {
           id: 'diagram-placevalue',
           title: 'جدول القيمة المنزلية للعدد',
           image: 'placevalue',
+          unitId: 'unit1',
           labels: [
             { id: '1', name: 'خانة الآحاد', x: 20, y: 50 },
             { id: '2', name: 'خانة العشرات', x: 40, y: 50 },
             { id: '3', name: 'خانة المئات', x: 60, y: 50 },
             { id: '4', name: 'خانة الألوف', x: 80, y: 50 }
           ]
+        },
+        {
+          id: 'diagram-multiplication',
+          title: 'مكونات جملة الضرب ومجموعات العناصر',
+          image: 'multiplication',
+          unitId: 'unit2',
+          labels: [
+            { id: '1', name: 'عدد المجموعات المتساوية', x: 25, y: 50 },
+            { id: '2', name: 'عدد العناصر في كل مجموعة', x: 75, y: 50 },
+            { id: '3', name: 'الناتج الكلي (المجموع الكلي)', x: 50, y: 85 }
+          ]
+        },
+        {
+          id: 'diagram-division',
+          title: 'مكونات عملية القسمة الطويلة وعناصرها',
+          image: 'division',
+          unitId: 'unit3',
+          labels: [
+            { id: '1', name: 'المقسوم (العدد الكلي المراد تقسيمه)', x: 30, y: 35 },
+            { id: '2', name: 'المقسوم عليه', x: 70, y: 35 },
+            { id: '3', name: 'خارج (ناتج) القسمة', x: 50, y: 75 },
+            { id: '4', name: 'الباقي (إن وجد)', x: 50, y: 92 }
+          ]
+        },
+        {
+          id: 'diagram-fraction',
+          title: 'مكونات الكسر الاعتيادي',
+          image: 'fraction',
+          unitId: 'unit4',
+          labels: [
+            { id: '1', name: 'البسط (عدد الأجزاء الملونة)', x: 50, y: 15 },
+            { id: '2', name: 'خط الكسر', x: 50, y: 50 },
+            { id: '3', name: 'المقام (العدد الكلي للأجزاء)', x: 50, y: 85 }
+          ]
+        },
+        {
+          id: 'diagram-clock',
+          title: 'مكونات وعقارب الساعة',
+          image: 'clock',
+          unitId: 'unit5',
+          labels: [
+            { id: '1', name: 'شوكة الساعات (القصيرة)', x: 35, y: 45 },
+            { id: '2', name: 'شوكة الدقائق (الطويلة)', x: 65, y: 30 },
+            { id: '3', name: 'شوكة الثواني (الرفيعة)', x: 50, y: 70 }
+          ]
+        },
+        {
+          id: 'diagram-geometry',
+          title: 'مكونات الأشكال الهندسية ومحيطها',
+          image: 'geometry',
+          unitId: 'unit6',
+          labels: [
+            { id: '1', name: 'المستطيل (الطول والعرض)', x: 30, y: 35 },
+            { id: '2', name: 'المربع (أضلاع متطابقة)', x: 70, y: 35 },
+            { id: '3', name: 'المثلث (ثلاث زوايا)', x: 50, y: 75 }
+          ]
         }
       ];
 
-      // Helper to fetch one unique True/False question
+      // Check if a question belongs to the selected scope
+      const isItemInScope = (unitId: string, lessonId?: string): boolean => {
+        if (scopeType === 'all') {
+          return true;
+        }
+        if (scopeType === 'favorites') {
+          if (lessonId) {
+            return favorites.includes(lessonId);
+          }
+          const unitLessons = curriculumUnits.find(u => u.id === unitId)?.lessons || [];
+          return unitLessons.some(l => favorites.includes(l.id));
+        }
+        if (scopeType === 'unit') {
+          return unitId === selectedUnitId;
+        }
+        if (scopeType === 'lesson') {
+          if (lessonId) {
+            return lessonId === selectedLessonId;
+          }
+          return unitId === selectedUnitId;
+        }
+        return true;
+      };
+
+      const getActiveUnitId = (): string => {
+        if (scopeType === 'unit') return selectedUnitId;
+        if (scopeType === 'lesson') {
+          const matchedUnit = curriculumUnits.find(u => u.lessons.some(l => l.id === selectedLessonId));
+          if (matchedUnit) return matchedUnit.id;
+        }
+        if (scopeType === 'favorites' && favorites.length > 0) {
+          const matchedUnit = curriculumUnits.find(u => u.lessons.some(l => favorites.includes(l.id)));
+          if (matchedUnit) return matchedUnit.id;
+        }
+        return 'unit1';
+      };
+
+      const getScopedTFPool = () => {
+        const filteredStatic = staticTFPool.filter(q => isItemInScope(q.unitId, q.lessonId));
+        const curQuestions = questionPool
+          .filter(q => q.type === 'boolean' && isItemInScope(q.unitId, q.lessonId))
+          .map(q => ({
+            text: q.text,
+            correct: q.correctAnswer === true ? 'صح' : 'خطأ',
+            isReal: false,
+            diff: q.score && q.score > 5 ? 'hard' : 'medium',
+            unitId: q.unitId || '',
+            lessonId: q.lessonId || ''
+          }));
+
+        const combined = [...filteredStatic, ...curQuestions];
+        let finalPool = combined;
+
+        if (realWorldOnly) {
+          const rw = combined.filter(q => q.isReal);
+          if (rw.length > 0) finalPool = rw;
+        }
+        const diffFiltered = finalPool.filter(q => q.diff === difficulty);
+        if (diffFiltered.length > 0) finalPool = diffFiltered;
+
+        return finalPool;
+      };
+
+      const getScopedFillPool = () => {
+        const filteredStatic = staticFillPool.filter(q => isItemInScope(q.unitId, q.lessonId));
+        const curQuestions = questionPool
+          .filter(q => q.type === 'fill' && isItemInScope(q.unitId, q.lessonId))
+          .map(q => ({
+            text: q.text,
+            correct: String(q.correctAnswer),
+            isReal: false,
+            diff: q.score && q.score > 5 ? 'hard' : 'medium',
+            unitId: q.unitId || '',
+            lessonId: q.lessonId || ''
+          }));
+
+        const combined = [...filteredStatic, ...curQuestions];
+        let finalPool = combined;
+
+        if (realWorldOnly) {
+          const rw = combined.filter(q => q.isReal);
+          if (rw.length > 0) finalPool = rw;
+        }
+        const diffFiltered = finalPool.filter(q => q.diff === difficulty);
+        if (diffFiltered.length > 0) finalPool = diffFiltered;
+
+        return finalPool;
+      };
+
+      const generateDynamicTF = (unitId: string): { text: string; correct: string } => {
+        let text = '';
+        let correct = 'صح';
+        let num1 = 0, num2 = 0, ans = 0;
+        const isTrue = Math.random() > 0.5;
+
+        switch (unitId) {
+          case 'unit1':
+            num1 = Math.floor(Math.random() * 900) + 100;
+            num2 = Math.floor(Math.random() * 900) + 100;
+            if (Math.random() > 0.5) {
+              ans = num1 + num2;
+              correct = isTrue ? 'صح' : 'خطأ';
+              const displayed = isTrue ? ans : ans + (Math.random() > 0.5 ? 10 : -10);
+              text = `ناتج عملية الجمع ${num1} + ${num2} هو ${displayed}.`;
+            } else {
+              if (num1 < num2) { const t = num1; num1 = num2; num2 = t; }
+              ans = num1 - num2;
+              correct = isTrue ? 'صح' : 'خطأ';
+              const displayed = isTrue ? ans : ans + (Math.random() > 0.5 ? 5 : -5);
+              text = `ناتج عملية الطرح ${num1} - ${num2} هو ${displayed}.`;
+            }
+            break;
+
+          case 'unit2':
+            num1 = Math.floor(Math.random() * 8) + 2;
+            num2 = Math.floor(Math.random() * 10);
+            ans = num1 * num2;
+            correct = isTrue ? 'صح' : 'خطأ';
+            const displayedMult = isTrue ? ans : ans + (Math.random() > 0.5 ? 2 : -2);
+            text = `ناتج عملية الضرب ${num1} × ${num2} هو ${displayedMult}.`;
+            break;
+
+          case 'unit3':
+            num2 = Math.floor(Math.random() * 8) + 2;
+            num1 = num2 * (Math.floor(Math.random() * 10) + 1);
+            ans = num1 / num2;
+            correct = isTrue ? 'صح' : 'خطأ';
+            const displayedDiv = isTrue ? ans : ans + (Math.random() > 0.5 ? 1 : -1);
+            text = `ناتج عملية القسمة ${num1} ÷ ${num2} هو ${displayedDiv}.`;
+            break;
+
+          case 'unit4':
+            num1 = Math.floor(Math.random() * 5) + 1;
+            num2 = num1 + Math.floor(Math.random() * 4) + 1;
+            if (Math.random() > 0.5) {
+              text = `في الكسر الاعتيادي ${num1}/${num2}، يسمى الرقم ${num1} بالبسط.`;
+              correct = 'صح';
+            } else {
+              text = `في الكسر الاعتيادي ${num1}/${num2}، يسمى الرقم ${num1} بالمقام.`;
+              correct = 'خطأ';
+            }
+            break;
+
+          case 'unit5':
+            if (Math.random() > 0.5) {
+              text = 'الياردة الواحدة تحتوي على 3 أقدام تماماً.';
+              correct = 'صح';
+            } else {
+              text = 'القدم الواحد يحتوي على 10 بوصات فقط.';
+              correct = 'خطأ';
+            }
+            break;
+
+          case 'unit6':
+            if (Math.random() > 0.5) {
+              text = 'المثلث هو شكل هندسي مغلق يحتوي على 3 أضلاع و 3 رؤوس.';
+              correct = 'صح';
+            } else {
+              text = 'المستطيل يتميز بأن جميع أضلاعه الأربعة متساوية في الطول.';
+              correct = 'خطأ';
+            }
+            break;
+
+          default:
+            text = 'أي عدد نضربه في صفر، يكون الناتج دائماً صفراً.';
+            correct = 'صح';
+        }
+
+        return { text, correct };
+      };
+
+      const generateDynamicFill = (unitId: string): { text: string; correct: string } => {
+        let text = '';
+        let correct = '';
+        let num1 = 0, num2 = 0, ans = 0;
+
+        switch (unitId) {
+          case 'unit1':
+            num1 = Math.floor(Math.random() * 900) + 100;
+            num2 = Math.floor(Math.random() * 900) + 100;
+            if (Math.random() > 0.5) {
+              correct = String(num1 + num2);
+              text = `احسب ناتج الجمع التالي: ${num1} + ${num2} = ........`;
+            } else {
+              if (num1 < num2) { const t = num1; num1 = num2; num2 = t; }
+              correct = String(num1 - num2);
+              text = `احسب ناتج الطرح التالي: ${num1} - ${num2} = ........`;
+            }
+            break;
+
+          case 'unit2':
+            num1 = Math.floor(Math.random() * 8) + 2;
+            num2 = Math.floor(Math.random() * 10);
+            correct = String(num1 * num2);
+            text = `احسب ناتج عملية الضرب التالية: ${num1} × ${num2} = ........`;
+            break;
+
+          case 'unit3':
+            num2 = Math.floor(Math.random() * 8) + 2;
+            ans = Math.floor(Math.random() * 9) + 1;
+            num1 = num2 * ans;
+            correct = String(ans);
+            text = `احسب ناتج عملية القسمة بدون باق التالية: ${num1} ÷ ${num2} = ........`;
+            break;
+
+          case 'unit4':
+            num1 = Math.floor(Math.random() * 5) + 1;
+            num2 = num1 + Math.floor(Math.random() * 4) + 1;
+            if (Math.random() > 0.5) {
+              correct = String(num1);
+              text = `في الكسر الاعتيادي ${num1}/${num2}، البسط هو الرقم ........`;
+            } else {
+              correct = String(num2);
+              text = `في الكسر الاعتيادي ${num1}/${num2}، المقام هو الرقم ........`;
+            }
+            break;
+
+          case 'unit5':
+            if (Math.random() > 0.5) {
+              correct = '24';
+              text = 'اليوم الكامل يحتوي على ........ ساعة.';
+            } else {
+              correct = '12';
+              text = 'القدم الواحد يحتوي على ........ بوصة.';
+            }
+            break;
+
+          case 'unit6':
+            if (Math.random() > 0.5) {
+              correct = '3';
+              text = 'المثلث له ........ أضلاع و 3 رؤوس.';
+            } else {
+              correct = '4';
+              text = 'المستطيل والمربع لكل منهما ........ زوايا قائمة.';
+            }
+            break;
+
+          default:
+            text = 'احسب ناتج الضرب: 5 × 1 = ........';
+            correct = '5';
+        }
+
+        return { text, correct };
+      };
+
       const getUniqueTF = (pIdx: number, qSubIdx: number): { text: string; correct: string } => {
-        let pool = staticTFPool.filter(q => {
-          let ok = true;
-          if (realWorldOnly) ok = ok && q.isReal;
-          ok = ok && q.diff === difficulty;
-          return ok;
-        });
-
-        if (pool.length === 0) {
-          pool = staticTFPool.filter(q => q.diff === difficulty);
-        }
-        if (pool.length === 0) {
-          pool = staticTFPool;
-        }
-
+        const pool = getScopedTFPool();
         const unused = pool.filter(q => !usedTFTexts.has(q.text));
         if (unused.length > 0) {
           const picked = unused[Math.floor(Math.random() * unused.length)];
           usedTFTexts.add(picked.text);
           return { text: picked.text, correct: picked.correct };
         }
-
-        // Depleted! Generate math expression dynamically to maintain absolute uniqueness
-        let text = '';
-        let correct = 'صح';
-        let attempts = 0;
-
-        while (attempts < 100) {
-          let num1 = 0, num2 = 0, ans = 0;
-          const isPlus = Math.random() > 0.5;
-          const isTrue = Math.random() > 0.5;
-
-          if (difficulty === 'easy') {
-            num1 = Math.floor(Math.random() * 10) + 1;
-            num2 = Math.floor(Math.random() * 10) + 1;
-          } else if (difficulty === 'medium') {
-            num1 = Math.floor(Math.random() * 90) + 10;
-            num2 = Math.floor(Math.random() * 90) + 10;
-          } else {
-            num1 = Math.floor(Math.random() * 900) + 100;
-            num2 = Math.floor(Math.random() * 900) + 100;
-          }
-
-          if (isPlus) {
-            ans = num1 + num2;
-            correct = isTrue ? 'صح' : 'خطأ';
-            const displayed = isTrue ? ans : ans + (Math.random() > 0.5 ? 2 : -2);
-            text = `ناتج جمع ${num1} + ${num2} هو ${displayed}.`;
-          } else {
-            if (num1 < num2) { const t = num1; num1 = num2; num2 = t; }
-            ans = num1 - num2;
-            correct = isTrue ? 'صح' : 'خطأ';
-            const displayed = isTrue ? ans : ans + (Math.random() > 0.5 ? 3 : -3);
-            text = `ناتج طرح ${num1} - ${num2} هو ${displayed}.`;
-          }
-
-          if (!usedTFTexts.has(text)) {
-            usedTFTexts.add(text);
-            return { text, correct };
-          }
-          attempts++;
-        }
-
-        return { text: `أي عدد يضرب في الرقم 1 يكون الناتج نفس العدد تماماً (تحدي الورقة ${pIdx + 1})`, correct: 'صح' };
+        const dyn = generateDynamicTF(getActiveUnitId());
+        usedTFTexts.add(dyn.text);
+        return dyn;
       };
 
-      // Helper to fetch one unique Fill in the Blank question
       const getUniqueFill = (pIdx: number, qSubIdx: number): { text: string; correct: string } => {
-        let pool = staticFillPool.filter(q => {
-          let ok = true;
-          if (realWorldOnly) ok = ok && q.isReal;
-          ok = ok && q.diff === difficulty;
-          return ok;
-        });
-
-        if (pool.length === 0) {
-          pool = staticFillPool.filter(q => q.diff === difficulty);
-        }
-        if (pool.length === 0) {
-          pool = staticFillPool;
-        }
-
+        const pool = getScopedFillPool();
         const unused = pool.filter(q => !usedFillTexts.has(q.text));
         if (unused.length > 0) {
           const picked = unused[Math.floor(Math.random() * unused.length)];
           usedFillTexts.add(picked.text);
           return { text: picked.text, correct: picked.correct };
         }
+        const dyn = generateDynamicFill(getActiveUnitId());
+        usedFillTexts.add(dyn.text);
+        return dyn;
+      };
 
-        // Depleted! Generate dynamically to guarantee zero repetition
-        let text = '';
-        let correct = '';
-        let attempts = 0;
+      const getScopedDiagrams = () => {
+        const activeUnit = getActiveUnitId();
+        if (scopeType === 'all') {
+          return extendedDiagrams;
+        }
+        const filtered = extendedDiagrams.filter(d => d.unitId === activeUnit);
+        if (filtered.length > 0) return filtered;
+        return extendedDiagrams;
+      };
 
-        while (attempts < 100) {
-          let num1 = 0, num2 = 0;
-          const isMult = Math.random() > 0.5;
-
-          if (difficulty === 'easy') {
-            num1 = Math.floor(Math.random() * 5) + 1;
-            num2 = Math.floor(Math.random() * 5) + 1;
-          } else if (difficulty === 'medium') {
-            num1 = Math.floor(Math.random() * 10) + 1;
-            num2 = Math.floor(Math.random() * 10) + 1;
-          } else {
-            num1 = Math.floor(Math.random() * 12) + 1;
-            num2 = Math.floor(Math.random() * 12) + 1;
+      const getScopedMatchingBlock = (pIdx: number) => {
+        const activeUnitId = getActiveUnitId();
+        if (scopeType === 'all') {
+          const unused = staticMatchingBlocks.filter(b => !usedMatchingIds.has(b.id));
+          if (unused.length > 0) {
+            const picked = unused[Math.floor(Math.random() * unused.length)];
+            usedMatchingIds.add(picked.id);
+            return picked;
           }
-
-          if (isMult) {
-            correct = String(num1 * num2);
-            text = `احسب ناتج الضرب التالي: ${num1} × ${num2} = ........`;
-          } else {
-            correct = String(num1 + num2);
-            text = `احسب ناتج الجمع التالي: ${num1} + ${num2} = ........`;
-          }
-
-          if (!usedFillTexts.has(text)) {
-            usedFillTexts.add(text);
-            return { text, correct };
-          }
-          attempts++;
+          return generateDynamicMatchBlock(activeUnitId, pIdx);
         }
 
-        return { text: `العدد الذي يسبق الرقم 1000 مباشرة هو ........`, correct: '999' };
+        if (activeUnitId === 'unit1') {
+          const b = staticMatchingBlocks.find(x => x.id === 'match-multiples');
+          if (b) return b;
+        } else if (activeUnitId === 'unit4') {
+          const b = staticMatchingBlocks.find(x => x.id === 'match-fractions');
+          if (b) return b;
+        } else if (activeUnitId === 'unit5') {
+          const b = staticMatchingBlocks.find(x => x.id === 'match-units');
+          if (b) return b;
+        } else if (activeUnitId === 'unit6') {
+          const b = staticMatchingBlocks.find(x => x.id === 'match-shapes');
+          if (b) return b;
+        }
+
+        return generateDynamicMatchBlock(activeUnitId, pIdx);
+      };
+
+      const generateDynamicMatchBlock = (unitId: string, pIdx: number) => {
+        const left: string[] = [];
+        const right: string[] = [];
+        const correctArr = [0, 1, 2, 3];
+
+        if (unitId === 'unit3') {
+          const divisors = [7, 8, 9, 6];
+          const quotients = [6, 7, 8, 9];
+          for (let i = 0; i < 4; i++) {
+            const div = divisors[i];
+            const q = quotients[i];
+            left.push(`احسب ناتج: ${div * q} ÷ ${div}`);
+            right.push(`${q}`);
+          }
+          return {
+            id: `match-dyn-div-${pIdx}`,
+            title: 'توصيل عمليات القسمة بالنواتج الصحيحة',
+            left,
+            right,
+            correct: correctArr
+          };
+        } else {
+          const multipliers = [7, 8, 9, 6];
+          for (let i = 0; i < 4; i++) {
+            const mult = multipliers[i];
+            const rand = Math.floor(Math.random() * 8) + 2;
+            left.push(`احسب ناتج: ${mult} × ${rand}`);
+            right.push(`${mult * rand}`);
+          }
+          return {
+            id: `match-dyn-mult-${pIdx}`,
+            title: 'توصيل عمليات الضرب بالنواتج الحسابية الصحيحة',
+            left,
+            right,
+            correct: correctArr
+          };
+        }
       };
 
       const newPages: GeneratedQuestion[][] = [];
@@ -359,32 +638,7 @@ export default function WorksheetGenerator({
 
         // 3. Add Matching if selected
         if (selectedTypes.includes('matching')) {
-          // Select unique matching block
-          const unusedBlocks = staticMatchingBlocks.filter(b => !usedMatchingIds.has(b.id));
-          let matchItem;
-          if (unusedBlocks.length > 0) {
-            matchItem = unusedBlocks[Math.floor(Math.random() * unusedBlocks.length)];
-            usedMatchingIds.add(matchItem.id);
-          } else {
-            // Generate dynamic multiplication matching block
-            const left: string[] = [];
-            const right: string[] = [];
-            const correctArr: number[] = [0, 1, 2, 3];
-            const nums = [7, 8, 9, 6];
-            for (let i = 0; i < 4; i++) {
-              const mult = nums[i];
-              const rand = Math.floor(Math.random() * 9) + 2;
-              left.push(`احسب: ${mult} × ${rand}`);
-              right.push(`${mult * rand}`);
-            }
-            matchItem = {
-              id: `match-dyn-${p}`,
-              title: 'توصيل عمليات الضرب بالنواتج الحسابية الصحيحة',
-              left,
-              right,
-              correct: correctArr
-            };
-          }
+          const matchItem = getScopedMatchingBlock(p);
 
           pageQuestions.push({
             id: `q-match-1-${p}`,
@@ -398,14 +652,14 @@ export default function WorksheetGenerator({
 
         // 4. Add Diagram Labeling if selected
         if (selectedTypes.includes('label_diagram')) {
-          const unusedDiagrams = extendedDiagrams.filter(d => !usedDiagramIds.has(d.id));
+          const scopedDiagrams = getScopedDiagrams();
+          const unusedDiagrams = scopedDiagrams.filter(d => !usedDiagramIds.has(d.id));
           let pickedDiagram;
           if (unusedDiagrams.length > 0) {
             pickedDiagram = unusedDiagrams[Math.floor(Math.random() * unusedDiagrams.length)];
             usedDiagramIds.add(pickedDiagram.id);
           } else {
-            // Graceful wrap around without throwing duplicate errors
-            pickedDiagram = extendedDiagrams[p % extendedDiagrams.length];
+            pickedDiagram = scopedDiagrams[p % scopedDiagrams.length];
           }
 
           pageQuestions.push({
