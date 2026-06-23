@@ -282,6 +282,14 @@ export default function App() {
                   favorites={user.favorites}
                   toggleFavorite={handleToggleFavorite}
                   onSelectLesson={(lesson, unit) => setSelectedLesson({ lesson, unit })}
+                  onNavigateToTab={(tab) => {
+                    setActiveTab(tab);
+                    setSelectedLesson(null);
+                    setActiveQuizScope(null);
+                  }}
+                  onStartQuiz={(scope) => {
+                    setActiveQuizScope(scope);
+                  }}
                 />
               )}
 
@@ -316,6 +324,14 @@ export default function App() {
                   toggleFavorite={handleToggleFavorite}
                   onSelectLesson={(lesson, unit) => setSelectedLesson({ lesson, unit })}
                   showOnlyFavorites={true}
+                  onNavigateToTab={(tab) => {
+                    setActiveTab(tab);
+                    setSelectedLesson(null);
+                    setActiveQuizScope(null);
+                  }}
+                  onStartQuiz={(scope) => {
+                    setActiveQuizScope(scope);
+                  }}
                 />
               )}
             </AnimatePresence>

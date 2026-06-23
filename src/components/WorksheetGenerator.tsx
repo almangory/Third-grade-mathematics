@@ -73,28 +73,257 @@ export default function WorksheetGenerator({
     }
   };
 
-  // Worksheet Question Generator Core Engine
+  // Worksheet Question Generator Core Engine with STRICT Uniqueness & No Duplications
   const handleGenerate = () => {
     setIsGenerating(true);
 
     setTimeout(() => {
-      // Gather pool of applicable lessons based on scope
-      let targetLessonIds: string[] = [];
-      if (scopeType === 'all') {
-        targetLessonIds = curriculumUnits.flatMap(u => u.lessons.map(l => l.id));
-      } else if (scopeType === 'favorites') {
-        targetLessonIds = favorites;
-      } else if (scopeType === 'unit') {
-        const u = curriculumUnits.find(unit => unit.id === selectedUnitId);
-        targetLessonIds = u ? u.lessons.map(l => l.id) : [];
-      } else if (scopeType === 'lesson') {
-        targetLessonIds = [selectedLessonId];
-      }
+      // Track already selected elements globally for this document generation run
+      const usedTFTexts = new Set<string>();
+      const usedFillTexts = new Set<string>();
+      const usedMatchingIds = new Set<string>();
+      const usedDiagramIds = new Set<string>();
 
-      if (targetLessonIds.length === 0) {
-        // Fallback to all if favorites is empty
-        targetLessonIds = curriculumUnits.flatMap(u => u.lessons.map(l => l.id));
-      }
+      const staticTFPool = [
+        // Standard + Easy
+        { text: 'أي عدد نضربه في صفر، يكون الناتج دائماً صفراً.', correct: 'صح', isReal: false, diff: 'easy' },
+        { text: 'يكتب العدد (سبعة عشر) بالأرقام هكذا: 17', correct: 'صح', isReal: false, diff: 'easy' },
+        { text: 'اليوم الكامل يحتوي على 24 ساعة.', correct: 'صح', isReal: false, diff: 'easy' },
+
+        // Real-World + Easy
+        { text: 'إذا كان مع أحمد 5 تفاحات وأعطى أخته 3 تفاحات، يتبقى معه تفاحتان اثنتان.', correct: 'صح', isReal: true, diff: 'easy' },
+        { text: 'ثمن قطعة الحلوى 5 جنيهات، إذا اشتريت قطعتين تدفع 15 جنيهاً.', correct: 'خطأ', isReal: true, diff: 'easy' },
+
+        // Standard + Medium
+        { text: 'يكتب العدد (ألفان وثلاثة وسبعون) بالأرقام هكذا: 2073', correct: 'صح', isReal: false, diff: 'medium' },
+        { text: 'المستطيل هو شكل رباعي فيه كل أضلاعه الأربعة متساوية تماماً في الطول.', correct: 'خطأ', isReal: false, diff: 'medium' },
+        { text: 'عند ضرب أي عدد في 100، نكتب نفس العدد ونضع صفرين على يمينه.', correct: 'صح', isReal: false, diff: 'medium' },
+
+        // Real-World + Medium
+        { text: 'اشترى علي 3 كراسات رسم، إذا كان ثمن الكراسة 6 جنيهات، يدفع للبائع 18 جنيهاً.', correct: 'صح', isReal: true, diff: 'medium' },
+        { text: 'وزعت فاطمة 20 حبة تمر على 4 من صديقاتها بالتساوي، نصيب كل واحدة هو 5 تمرات.', correct: 'صح', isReal: true, diff: 'medium' },
+
+        // Standard + Hard
+        { text: 'الكسر 1/2 (النصف) أصغر من الكسر 1/4 (الربع) لأن الرقم 4 أكبر من 2.', correct: 'خطأ', isReal: false, diff: 'hard' },
+        { text: 'الخط المستقيم له نقطة بداية ونقطة نهاية محددة.', correct: 'خطأ', isReal: false, diff: 'hard' },
+
+        // Real-World + Hard
+        { text: 'يمشي عداء مسافة ميل واحد يومياً، وهو ما يعادل 1760 ياردة تماماً.', correct: 'صح', isReal: true, diff: 'hard' },
+        { text: 'إذا كان في خزان اللبن 5/6 السعة وتم بيع 1/6 السعة، يتبقى في الخزان ثلث السعة.', correct: 'خطأ', isReal: true, diff: 'hard' }
+      ];
+
+      const staticFillPool = [
+        // Standard + Easy
+        { text: 'احسب ناتج الجمع البسيط: 5 + 4 = ........', correct: '9', isReal: false, diff: 'easy' },
+        { text: 'العدد الفردي الذي يلي العدد 7 مباشرة هو ........', correct: '9', isReal: false, diff: 'easy' },
+
+        // Real-World + Easy
+        { text: 'مع أحمد 10 جنيهات، اشترى عصير بـ 6 جنيهات، بقي معه ........ جنيهات.', correct: '4', isReal: true, diff: 'easy' },
+        { text: 'في علبة التلوين 6 أقلام، في علبتين متطابقتين يوجد ........ قلماً.', correct: '12', isReal: true, diff: 'easy' },
+
+        // Standard + Medium
+        { text: 'احسب ناتج الجمع التالي: 4126 + 1872 = ........', correct: '5998', isReal: false, diff: 'medium' },
+        { text: 'احسب ناتج الطرح التالي: 5628 - 1313 = ........', correct: '4315', isReal: false, diff: 'medium' },
+        { text: '9 × 9 = ........', correct: '81', isReal: false, diff: 'medium' },
+
+        // Real-World + Medium
+        { text: 'وزع أب 35 جنيها بالتساوي على 5 من أبنائه، نصيب كل ابن هو ........ جنيهات.', correct: '7', isReal: true, diff: 'medium' },
+        { text: 'تضع أمي 7 قطع بسكويت في كل طبق، في 6 أطباق تضع ........ قطعة بسكويت.', correct: '42', isReal: true, diff: 'medium' },
+
+        // Standard + Hard
+        { text: 'القدم الواحد يحتوي على ........ بوصة.', correct: '12', isReal: false, diff: 'hard' },
+        { text: 'ربع الساعة يحتوي على ........ دقيقة.', correct: '15', isReal: false, diff: 'hard' },
+        { text: 'المثلث له ........ أضلاع و ........ رؤوس.', correct: '3 أضلاع و 3 رؤوس', isReal: false, diff: 'hard' },
+        { text: 'في الكسر 3/4 ، يسمى الرقم 3 بالـ ........ والرقم 4 بالـ ........', correct: 'البسط ، المقام', isReal: false, diff: 'hard' },
+
+        // Real-World + Hard
+        { text: 'اشترى النور سجادة مستطيلة طولها 4 أمتار وعرضها 2 متر، محيط هذه السجادة يساوي ........ أمتار.', correct: '12', isReal: true, diff: 'hard' },
+        { text: 'إذا قطف مزارع 952 برتقالة ووزعها بالتساوي على 7 صناديق، تحتوي كل منها على ........ برتقالة.', correct: '136', isReal: true, diff: 'hard' }
+      ];
+
+      const staticMatchingBlocks = [
+        {
+          id: 'match-units',
+          title: 'توصيل الوحدات بالقيم الصحيحة',
+          left: ['القدم الواحد', 'الياردة الواحدة', 'نصف الساعة', 'اليوم الكامل'],
+          right: ['24 ساعة', '12 بوصة', '30 دقيقة', '3 أقدام'],
+          correct: [1, 3, 2, 0]
+        },
+        {
+          id: 'match-shapes',
+          title: 'توصيل الأشكال الهندسية بخصائصها',
+          left: ['المربع', 'المثلث', 'المستطيل', 'الدائرة'],
+          right: ['له 3 أضلاع و 3 رؤوس', 'شكل رباعي جميع أضلاعه متساوية', 'ليس له أضلاع ولا رؤوس', 'كل ضلعين متقابلين متساويان'],
+          correct: [1, 0, 2, 3]
+        },
+        {
+          id: 'match-fractions',
+          title: 'توصيل الكسور بالكلمات المعبرة',
+          left: ['الكسر 1/2', 'الكسر 1/4', 'الكسر 3/4', 'الكسر 1/3'],
+          right: ['ثلاثة أرباع', 'ثلث', 'نصف', 'ربع'],
+          correct: [2, 3, 0, 1]
+        },
+        {
+          id: 'match-multiples',
+          title: 'توصيل مضاعفات الأعداد بنموذج القفز',
+          left: ['العد بالواحد', 'العد بالعشرة', 'العد بالمئة', 'العد بالألف'],
+          right: ['100، 200، 300', '1000، 2000، 3000', '1، 2، 3', '10، 20، 30'],
+          correct: [2, 3, 0, 1]
+        }
+      ];
+
+      const extendedDiagrams = [
+        ...allDiagrams,
+        {
+          id: 'diagram-geometry',
+          title: 'مكونات الأشكال الهندسية ومحيطها',
+          image: 'geometry',
+          labels: [
+            { id: '1', name: 'المستطيل (الطول والعرض)', x: 30, y: 35 },
+            { id: '2', name: 'المربع (أضلاع متطابقة)', x: 70, y: 35 },
+            { id: '3', name: 'المثلث (ثلاث زوايا)', x: 50, y: 75 }
+          ]
+        },
+        {
+          id: 'diagram-placevalue',
+          title: 'جدول القيمة المنزلية للعدد',
+          image: 'placevalue',
+          labels: [
+            { id: '1', name: 'خانة الآحاد', x: 20, y: 50 },
+            { id: '2', name: 'خانة العشرات', x: 40, y: 50 },
+            { id: '3', name: 'خانة المئات', x: 60, y: 50 },
+            { id: '4', name: 'خانة الألوف', x: 80, y: 50 }
+          ]
+        }
+      ];
+
+      // Helper to fetch one unique True/False question
+      const getUniqueTF = (pIdx: number, qSubIdx: number): { text: string; correct: string } => {
+        let pool = staticTFPool.filter(q => {
+          let ok = true;
+          if (realWorldOnly) ok = ok && q.isReal;
+          ok = ok && q.diff === difficulty;
+          return ok;
+        });
+
+        if (pool.length === 0) {
+          pool = staticTFPool.filter(q => q.diff === difficulty);
+        }
+        if (pool.length === 0) {
+          pool = staticTFPool;
+        }
+
+        const unused = pool.filter(q => !usedTFTexts.has(q.text));
+        if (unused.length > 0) {
+          const picked = unused[Math.floor(Math.random() * unused.length)];
+          usedTFTexts.add(picked.text);
+          return { text: picked.text, correct: picked.correct };
+        }
+
+        // Depleted! Generate math expression dynamically to maintain absolute uniqueness
+        let text = '';
+        let correct = 'صح';
+        let attempts = 0;
+
+        while (attempts < 100) {
+          let num1 = 0, num2 = 0, ans = 0;
+          const isPlus = Math.random() > 0.5;
+          const isTrue = Math.random() > 0.5;
+
+          if (difficulty === 'easy') {
+            num1 = Math.floor(Math.random() * 10) + 1;
+            num2 = Math.floor(Math.random() * 10) + 1;
+          } else if (difficulty === 'medium') {
+            num1 = Math.floor(Math.random() * 90) + 10;
+            num2 = Math.floor(Math.random() * 90) + 10;
+          } else {
+            num1 = Math.floor(Math.random() * 900) + 100;
+            num2 = Math.floor(Math.random() * 900) + 100;
+          }
+
+          if (isPlus) {
+            ans = num1 + num2;
+            correct = isTrue ? 'صح' : 'خطأ';
+            const displayed = isTrue ? ans : ans + (Math.random() > 0.5 ? 2 : -2);
+            text = `ناتج جمع ${num1} + ${num2} هو ${displayed}.`;
+          } else {
+            if (num1 < num2) { const t = num1; num1 = num2; num2 = t; }
+            ans = num1 - num2;
+            correct = isTrue ? 'صح' : 'خطأ';
+            const displayed = isTrue ? ans : ans + (Math.random() > 0.5 ? 3 : -3);
+            text = `ناتج طرح ${num1} - ${num2} هو ${displayed}.`;
+          }
+
+          if (!usedTFTexts.has(text)) {
+            usedTFTexts.add(text);
+            return { text, correct };
+          }
+          attempts++;
+        }
+
+        return { text: `أي عدد يضرب في الرقم 1 يكون الناتج نفس العدد تماماً (تحدي الورقة ${pIdx + 1})`, correct: 'صح' };
+      };
+
+      // Helper to fetch one unique Fill in the Blank question
+      const getUniqueFill = (pIdx: number, qSubIdx: number): { text: string; correct: string } => {
+        let pool = staticFillPool.filter(q => {
+          let ok = true;
+          if (realWorldOnly) ok = ok && q.isReal;
+          ok = ok && q.diff === difficulty;
+          return ok;
+        });
+
+        if (pool.length === 0) {
+          pool = staticFillPool.filter(q => q.diff === difficulty);
+        }
+        if (pool.length === 0) {
+          pool = staticFillPool;
+        }
+
+        const unused = pool.filter(q => !usedFillTexts.has(q.text));
+        if (unused.length > 0) {
+          const picked = unused[Math.floor(Math.random() * unused.length)];
+          usedFillTexts.add(picked.text);
+          return { text: picked.text, correct: picked.correct };
+        }
+
+        // Depleted! Generate dynamically to guarantee zero repetition
+        let text = '';
+        let correct = '';
+        let attempts = 0;
+
+        while (attempts < 100) {
+          let num1 = 0, num2 = 0;
+          const isMult = Math.random() > 0.5;
+
+          if (difficulty === 'easy') {
+            num1 = Math.floor(Math.random() * 5) + 1;
+            num2 = Math.floor(Math.random() * 5) + 1;
+          } else if (difficulty === 'medium') {
+            num1 = Math.floor(Math.random() * 10) + 1;
+            num2 = Math.floor(Math.random() * 10) + 1;
+          } else {
+            num1 = Math.floor(Math.random() * 12) + 1;
+            num2 = Math.floor(Math.random() * 12) + 1;
+          }
+
+          if (isMult) {
+            correct = String(num1 * num2);
+            text = `احسب ناتج الضرب التالي: ${num1} × ${num2} = ........`;
+          } else {
+            correct = String(num1 + num2);
+            text = `احسب ناتج الجمع التالي: ${num1} + ${num2} = ........`;
+          }
+
+          if (!usedFillTexts.has(text)) {
+            usedFillTexts.add(text);
+            return { text, correct };
+          }
+          attempts++;
+        }
+
+        return { text: `العدد الذي يسبق الرقم 1000 مباشرة هو ........`, correct: '999' };
+      };
 
       const newPages: GeneratedQuestion[][] = [];
 
@@ -104,119 +333,63 @@ export default function WorksheetGenerator({
 
         // 1. Add True/False if selected
         if (selectedTypes.includes('true_false')) {
-          let tfPool = [
-            // Standard + Easy
-            { text: 'أي عدد نضربه في صفر، يكون الناتج دائماً صفراً.', correct: 'صح', isReal: false, diff: 'easy' },
-            { text: 'يكتب العدد (سبعة عشر) بالأرقام هكذا: 17', correct: 'صح', isReal: false, diff: 'easy' },
-            { text: 'اليوم الكامل يحتوي على 24 ساعة.', correct: 'صح', isReal: false, diff: 'easy' },
+          const q1 = getUniqueTF(p, 1);
+          const q2 = getUniqueTF(p, 2);
 
-            // Real-World + Easy
-            { text: 'إذا كان مع أحمد 5 تفاحات وأعطى أخته 3 تفاحات، يتبقى معه تفاحتان اثنتان.', correct: 'صح', isReal: true, diff: 'easy' },
-            { text: 'ثمن قطعة الحلوى 5 جنيهات، إذا اشتريت قطعتين تدفع 15 جنيهاً.', correct: 'خطأ', isReal: true, diff: 'easy' },
-
-            // Standard + Medium
-            { text: 'يكتب العدد (ألفان وثلاثة وسبعون) بالأرقام هكذا: 2073', correct: 'صح', isReal: false, diff: 'medium' },
-            { text: 'المستطيل هو شكل رباعي فيه كل أضلاعه الأربعة متساوية تماماً في الطول.', correct: 'خطأ', isReal: false, diff: 'medium' },
-            { text: 'عند ضرب أي عدد في 100، نكتب نفس العدد ونضع صفرين على يمينه.', correct: 'صح', isReal: false, diff: 'medium' },
-
-            // Real-World + Medium
-            { text: 'اشترى علي 3 كراسات رسم، إذا كان ثمن الكراسة 6 جنيهات، يدفع للبائع 18 جنيهاً.', correct: 'صح', isReal: true, diff: 'medium' },
-            { text: 'وزعت فاطمة 20 حبة تمر على 4 من صديقاتها بالتساوي، نصيب كل واحدة هو 5 تمرات.', correct: 'صح', isReal: true, diff: 'medium' },
-
-            // Standard + Hard
-            { text: 'الكسر 1/2 (النصف) أصغر من الكسر 1/4 (الربع) لأن الرقم 4 أكبر من 2.', correct: 'خطأ', isReal: false, diff: 'hard' },
-            { text: 'الخط المستقيم له نقطة بداية ونقطة نهاية محددة.', correct: 'خطأ', isReal: false, diff: 'hard' },
-
-            // Real-World + Hard
-            { text: 'يمشي عداء مسافة ميل واحد يومياً، وهو ما يعادل 1760 ياردة تماماً.', correct: 'صح', isReal: true, diff: 'hard' },
-            { text: 'إذا كان في خزان اللبن 5/6 السعة وتم بيع 1/6 السعة، يتبقى في الخزان ثلث السعة.', correct: 'خطأ', isReal: true, diff: 'hard' }
-          ];
-
-          // Filter by realWorldOnly and difficulty
-          let filtered = tfPool;
-          if (realWorldOnly) {
-            filtered = filtered.filter(q => q.isReal);
-          }
-          filtered = filtered.filter(q => q.diff === difficulty);
-
-          // Fallback if empty
-          if (filtered.length < 2) {
-            filtered = tfPool.filter(q => q.diff === difficulty);
-          }
-          if (filtered.length < 2) {
-            filtered = tfPool;
-          }
-
-          // Pick 2 random
-          const shuffled = [...filtered].sort(() => 0.5 - Math.random());
           pageQuestions.push({
             id: `q-tf-1-${p}`,
             type: 'true_false',
-            text: `ضع علامة (صح) أو (خطأ) أمام العبارات التالية:\n1. ${shuffled[0].text}\n2. ${shuffled[1].text}`,
-            correctAnswer: `1. [ ${shuffled[0].correct} ] ، 2. [ ${shuffled[1].correct} ]`
+            text: `ضع علامة (صح) أو (خطأ) أمام العبارات التالية:\n1. ${q1.text}\n2. ${q2.text}`,
+            correctAnswer: `1. [ ${q1.correct} ] ، 2. [ ${q2.correct} ]`
           });
         }
 
-        // 2. Add Fill Blanket if selected
+        // 2. Add Fill Blank if selected
         if (selectedTypes.includes('fill_blank')) {
-          let fillPool = [
-            // Standard + Easy
-            { text: 'احسب ناتج الجمع البسيط: 5 + 4 = ........', correct: '9', isReal: false, diff: 'easy' },
-            { text: 'العدد الفردي الذي يلي العدد 7 مباشرة هو ........', correct: '9', isReal: false, diff: 'easy' },
+          const q1 = getUniqueFill(p, 1);
+          const q2 = getUniqueFill(p, 2);
 
-            // Real-World + Easy
-            { text: 'مع أحمد 10 جنيهات، اشترى عصير بـ 6 جنيهات، بقي معه ........ جنيهات.', correct: '4', isReal: true, diff: 'easy' },
-            { text: 'في علبة التلوين 6 أقلام، في علبتين متطابقتين يوجد ........ قلماً.', correct: '12', isReal: true, diff: 'easy' },
-
-            // Standard + Medium
-            { text: 'احسب ناتج الجمع التالي: 4126 + 1872 = ........', correct: '5998', isReal: false, diff: 'medium' },
-            { text: 'احسب ناتج الطرح التالي: 5628 - 1313 = ........', correct: '4315', isReal: false, diff: 'medium' },
-            { text: '9 × 9 = ........', correct: '81', isReal: false, diff: 'medium' },
-
-            // Real-World + Medium
-            { text: 'وزع أب 35 جنيها بالتساوي على 5 من أبنائه، نصيب كل ابن هو ........ جنيهات.', correct: '7', isReal: true, diff: 'medium' },
-            { text: 'تضع أمي 7 قطع بسكويت في كل طبق، في 6 أطباق تضع ........ قطعة بسكويت.', correct: '42', isReal: true, diff: 'medium' },
-
-            // Standard + Hard
-            { text: 'القدم الواحد يحتوي على ........ بوصة.', correct: '12', isReal: false, diff: 'hard' },
-            { text: 'ربع الساعة يحتوي على ........ دقيقة.', correct: '15', isReal: false, diff: 'hard' },
-            { text: 'المثلث له ........ أضلاع و ........ رؤوس.', correct: '3 أضلاع و 3 رؤوس', isReal: false, diff: 'hard' },
-            { text: 'في الكسر 3/4 ، يسمى الرقم 3 بالـ ........ والرقم 4 بالـ ........', correct: 'البسط ، المقام', isReal: false, diff: 'hard' },
-
-            // Real-World + Hard
-            { text: 'اشترى النور سجادة مستطيلة طولها 4 أمتار وعرضها 2 متر، محيط هذه السجادة يساوي ........ أمتار.', correct: '12', isReal: true, diff: 'hard' },
-            { text: 'إذا قطف مزارع 952 برتقالة ووزعها بالتساوي على 7 صناديق، تحتوي كل منها على ........ برتقالة.', correct: '136', isReal: true, diff: 'hard' }
-          ];
-
-          let filtered = fillPool;
-          if (realWorldOnly) {
-            filtered = filtered.filter(q => q.isReal);
-          }
-          filtered = filtered.filter(q => q.diff === difficulty);
-
-          if (filtered.length < 2) {
-            filtered = fillPool.filter(q => q.diff === difficulty);
-          }
-          if (filtered.length < 2) {
-            filtered = fillPool;
-          }
-
-          const shuffled = [...filtered].sort(() => 0.5 - Math.random());
           pageQuestions.push({
             id: `q-fb-1-${p}`,
             type: 'fill_blank',
-            text: `أكمل الفراغات التالية بالإجابة الصحيحة:\n1. ${shuffled[0].text}\n2. ${shuffled[1].text}`,
-            correctAnswer: `1. [ ${shuffled[0].correct} ] ، 2. [ ${shuffled[1].correct} ]`
+            text: `أكمل الفراغات التالية بالإجابة الصحيحة المناسبة:\n1. ${q1.text}\n2. ${q2.text}`,
+            correctAnswer: `1. [ ${q1.correct} ] ، 2. [ ${q2.correct} ]`
           });
         }
 
         // 3. Add Matching if selected
         if (selectedTypes.includes('matching')) {
-          const matchItem = allMatches[0];
+          // Select unique matching block
+          const unusedBlocks = staticMatchingBlocks.filter(b => !usedMatchingIds.has(b.id));
+          let matchItem;
+          if (unusedBlocks.length > 0) {
+            matchItem = unusedBlocks[Math.floor(Math.random() * unusedBlocks.length)];
+            usedMatchingIds.add(matchItem.id);
+          } else {
+            // Generate dynamic multiplication matching block
+            const left: string[] = [];
+            const right: string[] = [];
+            const correctArr: number[] = [0, 1, 2, 3];
+            const nums = [7, 8, 9, 6];
+            for (let i = 0; i < 4; i++) {
+              const mult = nums[i];
+              const rand = Math.floor(Math.random() * 9) + 2;
+              left.push(`احسب: ${mult} × ${rand}`);
+              right.push(`${mult * rand}`);
+            }
+            matchItem = {
+              id: `match-dyn-${p}`,
+              title: 'توصيل عمليات الضرب بالنواتج الحسابية الصحيحة',
+              left,
+              right,
+              correct: correctArr
+            };
+          }
+
           pageQuestions.push({
             id: `q-match-1-${p}`,
             type: 'matching',
-            text: 'صل من العمود (أ) ما يناسبه من العمود (ب):',
+            text: 'صل كل عنصر من العمود (أ) بما يناسبه تماماً من العمود (ب):',
             leftItems: matchItem.left,
             rightItems: [...matchItem.right].sort(() => 0.5 - Math.random()), // Shuffled right
             correctAnswer: matchItem.left.map((item, idx) => `${item} ➔ ${matchItem.right[matchItem.correct[idx]]}`).join(' | ')
@@ -225,14 +398,23 @@ export default function WorksheetGenerator({
 
         // 4. Add Diagram Labeling if selected
         if (selectedTypes.includes('label_diagram')) {
-          const randomDiagram = allDiagrams[p % allDiagrams.length];
+          const unusedDiagrams = extendedDiagrams.filter(d => !usedDiagramIds.has(d.id));
+          let pickedDiagram;
+          if (unusedDiagrams.length > 0) {
+            pickedDiagram = unusedDiagrams[Math.floor(Math.random() * unusedDiagrams.length)];
+            usedDiagramIds.add(pickedDiagram.id);
+          } else {
+            // Graceful wrap around without throwing duplicate errors
+            pickedDiagram = extendedDiagrams[p % extendedDiagrams.length];
+          }
+
           pageQuestions.push({
             id: `q-diag-1-${p}`,
             type: 'label_diagram',
-            text: `انظر إلى الرسمة أدناه واكتب أسماء المكونات المشار إليها بالأرقام: (${randomDiagram.title})`,
-            diagramImg: randomDiagram.image,
-            labels: randomDiagram.labels,
-            correctAnswer: randomDiagram.labels.map(l => `${l.id}: ${l.name}`).join(' ، ')
+            text: `تأمل الرسم التوضيحي أدناه، ثم اكتب المكون المناسب لكل رقم مشار إليه: (${pickedDiagram.title})`,
+            diagramImg: pickedDiagram.image,
+            labels: pickedDiagram.labels,
+            correctAnswer: pickedDiagram.labels.map(l => `${l.id}: ${l.name}`).join(' ، ')
           });
         }
 
@@ -520,13 +702,13 @@ export default function WorksheetGenerator({
           {generatedPages.map((page, pIdx) => (
             <div
               key={pIdx}
-              className="relative w-full max-w-[800px] min-h-[1130px] mx-auto bg-white p-12 shadow-xl border-t-[8px] border-green-500 font-sans text-right relative flex flex-col justify-between print:shadow-none print:border-t-0 print:p-8 print:w-full print:min-h-0 page-break-after"
+              className="relative w-full max-w-[800px] min-h-[1130px] mx-auto bg-white p-12 shadow-xl border-t-[8px] border-green-500 font-sans text-right flex flex-col justify-between page-break-after printable-page-a4"
               dir="rtl"
               style={{ aspectRatio: '1/1.4142' }} // exact A4 aspect ratio
             >
               {/* WATERMARK ELEMENT */}
               {!isWatermarkRemoved && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden z-0 opacity-[0.04]">
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden z-0 opacity-[0.04] watermark-container">
                   <div className="text-center transform -rotate-45 font-sans font-black text-4xl whitespace-nowrap space-y-4">
                     <p>نقلة للمناهج الإلكترونية</p>
                     <p>نقلة للمناهج الإلكترونية</p>
@@ -625,6 +807,21 @@ export default function WorksheetGenerator({
                               <span>٣</span>
                               <span className="w-12 h-0.5 bg-purple-400 my-1"></span>
                               <span>٥</span>
+                            </div>
+                          ) : q.diagramImg === 'geometry' ? (
+                            <div className="flex gap-4 items-center justify-center w-full px-2">
+                              <div className="w-16 h-10 border-2 border-blue-500 bg-blue-50/50 rounded-lg flex items-center justify-center text-[10px] font-black text-blue-700">مستطيل</div>
+                              <div className="w-12 h-12 border-2 border-orange-500 bg-orange-50/50 rounded-lg flex items-center justify-center text-[10px] font-black text-orange-700">مربع</div>
+                              <div className="w-0 h-0 border-l-[20px] border-l-transparent border-r-[20px] border-r-transparent border-b-[40px] border-b-green-500 relative flex items-center justify-center">
+                                <span className="absolute top-4 text-[9px] text-white font-black whitespace-nowrap">مثلث</span>
+                              </div>
+                            </div>
+                          ) : q.diagramImg === 'placevalue' ? (
+                            <div className="w-full h-full flex divide-x divide-x-reverse divide-gray-200">
+                              <div className="flex-1 flex flex-col items-center justify-center bg-teal-50/50 text-[10px] font-black text-teal-800">الألوف</div>
+                              <div className="flex-1 flex flex-col items-center justify-center bg-blue-50/50 text-[10px] font-black text-blue-800">المئات</div>
+                              <div className="flex-1 flex flex-col items-center justify-center bg-amber-50/50 text-[10px] font-black text-amber-800">العشرات</div>
+                              <div className="flex-1 flex flex-col items-center justify-center bg-purple-50/50 text-[10px] font-black text-purple-800">الآحاد</div>
                             </div>
                           ) : (
                             <div className="w-24 h-24 rounded-full border-4 border-orange-400 flex items-center justify-center relative">
