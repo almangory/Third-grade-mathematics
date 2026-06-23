@@ -63,21 +63,27 @@ export default function Dashboard({
 
   // Speech helper
   const handleSpeak = () => {
-    if ('speechSynthesis' in window) {
-      if (isSpeaking) {
-        window.speechSynthesis.cancel();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        if (isSpeaking) {
+          window.speechSynthesis.cancel();
+          setIsSpeaking(false);
+          return;
+        }
+        const text = `مرحباً يا بطل! أنا رفيقك حسون المساعد الذكي. هل أنت مستعد لتحدي الرياضيات الرائع اليوم؟ هيا بنا نقرأ الأعداد، ونفرقع بالونات الضرب، ونعد البيتزا اللذيذة، ونضبط عقارب الساعة في كتابنا الجميل! بالتوفيق والنجاح يا بطل!`;
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'ar-SA';
+        utterance.rate = 0.9;
+        utterance.onend = () => setIsSpeaking(false);
+        utterance.onerror = () => setIsSpeaking(false);
+        setIsSpeaking(true);
+        window.speechSynthesis.speak(utterance);
+      } catch (e) {
+        console.warn('Speech synthesis error:', e);
         setIsSpeaking(false);
-        return;
       }
-      const text = `مرحباً يا بطل! أنا رفيقك حسون المساعد الذكي. هل أنت مستعد لتحدي الرياضيات الرائع اليوم؟ هيا بنا نقرأ الأعداد، ونفرقع بالونات الضرب، ونعد البيتزا اللذيذة، ونضبط عقارب الساعة في كتابنا الجميل! بالتوفيق والنجاح يا بطل!`;
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'ar-SA';
-      utterance.rate = 0.9;
-      utterance.onend = () => setIsSpeaking(false);
-      setIsSpeaking(true);
-      window.speechSynthesis.speak(utterance);
     } else {
-      alert('الاستماع الصوتي غير مدعوم في متصفحك الحالي.');
+      console.warn('Speech synthesis is not supported in this browser environment.');
     }
   };
 

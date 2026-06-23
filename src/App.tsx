@@ -19,6 +19,29 @@ const ALL_BADGES = [
   { id: 'b5', title: 'مهندس المستقبل 📐', description: 'يُمنح عند قياس أطوال القطع وتحديد خصائص المثلث والمربع.', icon: '📐', color: 'bg-purple-100 border-purple-300 text-purple-800' }
 ];
 
+// Safe local storage helper wrapper for sandboxed/restricted iframe environments
+const safeStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage.getItem(key);
+      }
+    } catch (e) {
+      console.warn('localStorage.getItem access blocked:', e);
+    }
+    return null;
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(key, value);
+      }
+    } catch (e) {
+      console.warn('localStorage.setItem access blocked:', e);
+    }
+  }
+};
+
 export default function App() {
   // App navigation tab
   const [activeTab, setActiveTab] = useState<string>('curriculum');
@@ -30,7 +53,7 @@ export default function App() {
 
   // Local storage profile state
   const [user, setUser] = useState<UserProfile>(() => {
-    const saved = localStorage.getItem('sudan_math_user_profile');
+    const saved = safeStorage.getItem('sudan_math_user_profile');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -50,7 +73,7 @@ export default function App() {
   });
 
   const [reports, setReports] = useState<QuizResult[]>(() => {
-    const saved = localStorage.getItem('sudan_math_quiz_reports');
+    const saved = safeStorage.getItem('sudan_math_quiz_reports');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -63,11 +86,11 @@ export default function App() {
 
   // Save changes to local storage
   useEffect(() => {
-    localStorage.setItem('sudan_math_user_profile', JSON.stringify(user));
+    safeStorage.setItem('sudan_math_user_profile', JSON.stringify(user));
   }, [user]);
 
   useEffect(() => {
-    localStorage.setItem('sudan_math_quiz_reports', JSON.stringify(reports));
+    safeStorage.setItem('sudan_math_quiz_reports', JSON.stringify(reports));
   }, [reports]);
 
   // Prompt before leaving or closing
@@ -91,12 +114,20 @@ export default function App() {
         setSelectedLesson(null);
         setActiveQuizScope(null);
         // Prevent default browser transition by pushing a dummy state
-        window.history.pushState(null, '', '');
+        try {
+          window.history.pushState(null, '', '');
+        } catch (err) {
+          console.warn('History pushState is disabled or restricted:', err);
+        }
       }
     };
 
     // Initially push state so there is something to pop
-    window.history.pushState(null, '', '');
+    try {
+      window.history.pushState(null, '', '');
+    } catch (err) {
+      console.warn('History pushState is disabled or restricted on startup:', err);
+    }
 
     window.addEventListener('popstate', handlePopState);
     return () => {
