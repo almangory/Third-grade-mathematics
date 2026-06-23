@@ -15,8 +15,8 @@ body {
 /* Print CSS Styles for professional A4 worksheets */
 @media print {
   @page {
-    size: A4;
-    margin: 0;
+    size: A4 portrait;
+    margin: 15mm 15mm 15mm 15mm !important;
   }
 
   /* Hide all interactive app layout containers */
@@ -24,6 +24,7 @@ body {
   aside,
   header,
   .no-print,
+  .no-print *,
   #worksheets-generator-tab > div:first-child,
   #worksheets-generator-tab > div:last-child > div:first-child,
   button,
@@ -40,7 +41,7 @@ body {
     color: #000000 !important;
     margin: 0 !important;
     padding: 0 !important;
-    width: 210mm !important;
+    width: 100% !important;
     height: auto !important;
     min-height: 100% !important;
     overflow: visible !important;
@@ -106,17 +107,15 @@ body {
     border: none !important;
   }
 
-  /* Printable individual page conforming exactly to A4 proportions */
+  /* Printable individual page conforming exactly to A4 proportions and avoiding vertical compression overlapping */
   .printable-page-a4 {
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: space-between !important;
-    width: 210mm !important;
-    height: 297mm !important;
-    min-height: 297mm !important;
-    max-height: 297mm !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 255mm !important;
+    max-height: none !important;
     margin: 0 !important;
-    padding: 20mm 20mm 15mm 20mm !important;
+    padding: 5mm 0 !important;
     border: none !important;
     box-shadow: none !important;
     page-break-after: always !important;

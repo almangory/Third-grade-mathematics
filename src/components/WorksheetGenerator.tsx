@@ -35,6 +35,23 @@ interface GeneratedQuestion {
   sideMatch?: { val1: string; equation: string; correct: string }[];
 }
 
+const toStandardDigits = (str: string): string => {
+  const arabicMap: Record<string, string> = {
+    '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
+    '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'
+  };
+  return str.split('').map(char => arabicMap[char] || char).join('');
+};
+
+const isSortAnswerCorrect = (studentVal: string | undefined, correctArray: string[]): boolean => {
+  if (!studentVal) return false;
+  const cleanNum = (str: string) => str.replace(/[^0-9\u0660-\u0669]/g, ' ').trim().split(/\s+/).map(x => toStandardDigits(x));
+  const studentNums = cleanNum(studentVal).filter(Boolean);
+  const correctNums = correctArray.map(x => toStandardDigits(x));
+  if (studentNums.length !== correctNums.length) return false;
+  return studentNums.every((num, idx) => num === correctNums[idx]);
+};
+
 export default function WorksheetGenerator({
   user,
   favorites,
@@ -52,6 +69,12 @@ export default function WorksheetGenerator({
   const [generatedPages, setGeneratedPages] = useState<GeneratedQuestion[][]>([]);
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
   const [realWorldOnly, setRealWorldOnly] = useState<boolean>(false);
+
+  // Student Solving States
+  const [studentMode, setStudentMode] = useState<boolean>(false);
+  const [isGraded, setIsGraded] = useState<boolean>(false);
+  const [studentAnswers, setStudentAnswers] = useState<Record<string, string>>({});
+  const [gradeResult, setGradeResult] = useState<{ score: number; total: number; percentage: number } | null>(null);
 
   // Password unlock state
   const [password, setPassword] = useState('');
@@ -86,9 +109,100 @@ export default function WorksheetGenerator({
     }
   };
 
+  // Grade student answers
+  const handleCheckAnswers = () => {
+    let score = 0;
+    let total = 0;
+
+    generatedPages.forEach(page => {
+      page.forEach(q => {
+        if (q.type === 'vertical_ops') {
+          q.verticalAdd?.forEach((item, idx) => {
+            total++;
+            const ans = (studentAnswers[`${q.id}-add-${idx}`] || '').trim();
+            if (toStandardDigits(ans) === toStandardDigits(item.ans)) score++;
+          });
+          q.verticalSub?.forEach((item, idx) => {
+            total++;
+            const ans = (studentAnswers[`${q.id}-sub-${idx}`] || '').trim();
+            if (toStandardDigits(ans) === toStandardDigits(item.ans)) score++;
+          });
+        } else if (q.type === 'compare_sort') {
+          q.compareItems?.forEach((item, idx) => {
+            total++;
+            const ans = (studentAnswers[`${q.id}-compare-${idx}`] || '').trim();
+            if (ans === item.correct) score++;
+          });
+          if (q.sortItems) {
+            total++;
+            if (isSortAnswerCorrect(studentAnswers[`${q.id}-sort`], q.sortItems.sorted)) {
+              score++;
+            }
+          }
+        } else if (q.type === 'abacus_pv') {
+          q.abacusNum?.forEach((item, idx) => {
+            total++;
+            const ans = (studentAnswers[`${q.id}-abacus-${idx}`] || '').trim();
+            if (toStandardDigits(ans) === toStandardDigits(item.val).trim()) score++;
+          });
+          q.fills?.forEach((f, fIdx) => {
+            total++;
+            const ans = (studentAnswers[`${q.id}-abacusFill-${fIdx}`] || '').trim();
+            if (toStandardDigits(ans) === toStandardDigits(f.correct).trim()) score++;
+          });
+        } else if (q.type === 'mult_div_grids') {
+          q.multBoxes?.forEach((box, bIdx) => {
+            total++;
+            const ans = (studentAnswers[`${q.id}-mult-${bIdx}`] || '').trim();
+            if (toStandardDigits(ans) === toStandardDigits(box.correct).trim()) score++;
+          });
+          q.divGrid?.quotients.forEach((quotient, qIdx) => {
+            total++;
+            const ans = (studentAnswers[`${q.id}-div-${qIdx}`] || '').trim();
+            if (toStandardDigits(ans) === toStandardDigits(quotient).trim()) score++;
+          });
+          q.sideMatch?.forEach((sm, smIdx) => {
+            total++;
+            const ans = (studentAnswers[`${q.id}-sideMatch-${smIdx}`] || '').trim();
+            if (toStandardDigits(ans) === toStandardDigits(sm.correct).trim()) score++;
+          });
+        } else if (q.type === 'mcq_fill_blank') {
+          q.mcqs?.forEach((mcq, mIdx) => {
+            total++;
+            const ans = (studentAnswers[`${q.id}-mcq-${mIdx}`] || '').trim();
+            if (ans === mcq.correct) score++;
+          });
+          q.fills?.forEach((f, fIdx) => {
+            total++;
+            const ans = (studentAnswers[`${q.id}-fill-${fIdx}`] || '').trim();
+            if (toStandardDigits(ans) === toStandardDigits(f.correct).trim()) score++;
+          });
+        }
+      });
+    });
+
+    const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
+    setGradeResult({ score, total, percentage });
+    setIsGraded(true);
+
+    // Scroll to top of preview area so student sees the success score banner
+    if (printAreaRef.current) {
+      printAreaRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleResetAnswers = () => {
+    setStudentAnswers({});
+    setIsGraded(false);
+    setGradeResult(null);
+  };
+
   // Worksheet Question Generator Core Engine with STRICT Uniqueness & No Duplications
   const handleGenerate = () => {
     setIsGenerating(true);
+    setStudentAnswers({});
+    setIsGraded(false);
+    setGradeResult(null);
 
     setTimeout(() => {
       // Helper to convert standard English numbers to Arabic-Indic digits (Sudanese schools style)
@@ -1122,18 +1236,73 @@ export default function WorksheetGenerator({
       {/* Preview Area: Right (or Left) side showing A4 sheets */}
       <div className="sudan-print-pages-wrapper flex-1 flex flex-col gap-4">
         {/* Actions above the A4 pages */}
-        <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+        <div className="flex flex-col xl:flex-row justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100 gap-4 no-print">
           <div className="text-right">
-            <h4 className="text-sm font-black text-gray-800">معاينة المستند المولد (A4)</h4>
-            <p className="text-[11px] text-gray-400 font-bold mt-0.5">راجع أوراق العمل قبل طباعتها للطلاب</p>
+            <h4 className="text-sm font-black text-gray-800">أوراق العمل التفاعلية المسرعة (A4)</h4>
+            <p className="text-[11px] text-gray-400 font-bold mt-0.5">اختر وضع الطباعة أو الحل التفاعلي المباشر للطلاب</p>
           </div>
-          <button
-            onClick={handlePrint}
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl shadow-md hover:shadow-lg active:scale-95 transition-all flex items-center gap-2 cursor-pointer text-sm"
-          >
-            <Printer className="w-4 h-4" />
-            <span>طباعة أو حفظ كـ PDF 🖨️</span>
-          </button>
+
+          {/* Mode Switcher */}
+          <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200/50">
+            <button
+              onClick={() => {
+                setStudentMode(false);
+                setIsGraded(false);
+              }}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                !studentMode
+                  ? 'bg-white text-gray-800 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              <Printer className="w-3.5 h-3.5 text-blue-500" />
+              <span>وضع المعاينة والطباعة 🖨️</span>
+            </button>
+            <button
+              onClick={() => {
+                setStudentMode(true);
+              }}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                studentMode
+                  ? 'bg-white text-gray-800 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              <CheckSquare className="w-3.5 h-3.5 text-green-500 animate-pulse" />
+              <span>وضع الحل التفاعلي للطالب 📝</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {studentMode ? (
+              <>
+                <button
+                  onClick={handleCheckAnswers}
+                  disabled={isGraded || generatedPages.length === 0}
+                  className="px-4 py-2 bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-black rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer text-xs"
+                >
+                  <CheckSquare className="w-4 h-4" />
+                  <span>تصحيح الإجابات الفوري 🏁</span>
+                </button>
+                {isGraded && (
+                  <button
+                    onClick={handleResetAnswers}
+                    className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-black rounded-xl border border-gray-200 transition-all flex items-center gap-1 cursor-pointer text-xs"
+                  >
+                    <span>إعادة الحل 🔄</span>
+                  </button>
+                )}
+              </>
+            ) : (
+              <button
+                onClick={handlePrint}
+                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl shadow-md hover:shadow-lg active:scale-95 transition-all flex items-center gap-2 cursor-pointer text-sm"
+              >
+                <Printer className="w-4 h-4" />
+                <span>طباعة أو حفظ كـ PDF 🖨️</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Simulated A4 pages container */}
@@ -1141,6 +1310,36 @@ export default function WorksheetGenerator({
           ref={printAreaRef}
           className="sudan-print-pages-container flex-1 space-y-8 overflow-y-auto max-h-[600px] p-4 bg-gray-100 rounded-3xl border border-gray-200/50 shadow-inner print:p-0 print:m-0 print:overflow-visible print:bg-white print:max-h-none"
         >
+          {/* Active solving student grade header */}
+          {studentMode && isGraded && gradeResult && (
+            <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white p-6 rounded-3xl shadow-lg border border-green-400 text-center space-y-3 max-w-[800px] mx-auto animate-bounce no-print">
+              <h3 className="text-xl font-black">🏁 تم تصحيح ورقة العمل بنجاح!</h3>
+              <p className="text-lg font-bold">
+                لقد أحرزت: <span className="font-mono text-yellow-300 font-black text-2xl mx-1">{gradeResult.score}</span> من <span className="font-mono text-white font-black text-2xl mx-1">{gradeResult.total}</span> درجة صحيحة!
+              </p>
+              <div className="w-full bg-white/20 rounded-full h-3 max-w-md mx-auto">
+                <div className="bg-yellow-400 h-3 rounded-full transition-all duration-1000" style={{ width: `${gradeResult.percentage}%` }}></div>
+              </div>
+              <p className="text-sm font-black text-yellow-200">
+                {gradeResult.percentage >= 90
+                  ? 'أنت عبقري رياضيات حقيقي! ممتاز جداً! 🏆🌟'
+                  : gradeResult.percentage >= 75
+                  ? 'رائع جداً! مستوى ممتاز واصل تفوقك! 🦁⭐'
+                  : gradeResult.percentage >= 50
+                  ? 'عمل جيد يا بطل! يمكنك المحاولة للحصول على درجة كاملة! 👍'
+                  : 'حاول مجدداً يا بطل، بالتدريب ستصل إلى القمة دائماً! 💪🎈'}
+              </p>
+              <div className="flex gap-3 justify-center pt-2">
+                <button
+                  onClick={handleResetAnswers}
+                  className="px-4 py-2 bg-white hover:bg-gray-100 text-green-800 font-black rounded-xl text-xs shadow transition-all cursor-pointer"
+                >
+                  إعادة حل ورقة العمل 🔄
+                </button>
+              </div>
+            </div>
+          )}
+
           {generatedPages.map((page, pIdx) => (
             <Fragment key={pIdx}>
               <div
@@ -1192,36 +1391,88 @@ export default function WorksheetGenerator({
                         <div className="space-y-4">
                           <p className="text-xs text-gray-500 font-bold border-r-2 border-green-500 pr-2">أولاً: أوجد ناتج الجمع رأسياً:</p>
                           <div className="flex justify-around gap-4">
-                            {q.verticalAdd?.map((item, idx) => (
-                              <div key={idx} className="flex flex-col items-end font-mono font-bold text-lg border-2 border-gray-100 p-4 rounded-xl w-24 bg-gray-50/50 shadow-sm">
-                                <span className="tracking-widest">{item.num1}</span>
-                                <span className="tracking-widest border-b-2 border-gray-400 pb-1 w-full text-right flex justify-between">
-                                  <span>+</span>
-                                  <span>{item.num2}</span>
-                                </span>
-                                <span className="h-6 text-green-600 pt-1 font-sans text-sm font-black">
-                                  {showAnswers ? item.ans : '..........'}
-                                </span>
-                              </div>
-                            ))}
+                            {q.verticalAdd?.map((item, idx) => {
+                              const stdAnswer = studentAnswers[`${q.id}-add-${idx}`] || '';
+                              const isCorrect = toStandardDigits(stdAnswer.trim()) === toStandardDigits(item.ans.trim());
+                              return (
+                                <div key={idx} className="flex flex-col items-end font-mono font-bold text-lg border-2 border-gray-100 p-4 rounded-xl w-24 bg-gray-50/50 shadow-sm relative">
+                                  <span className="tracking-widest">{item.num1}</span>
+                                  <span className="tracking-widest border-b-2 border-gray-400 pb-1 w-full text-right flex justify-between">
+                                    <span>+</span>
+                                    <span>{item.num2}</span>
+                                  </span>
+                                  {studentMode ? (
+                                    <div className="w-full mt-1.5">
+                                      <input
+                                        type="text"
+                                        disabled={isGraded}
+                                        value={stdAnswer}
+                                        onChange={(e) => setStudentAnswers(prev => ({ ...prev, [`${q.id}-add-${idx}`]: e.target.value }))}
+                                        placeholder="؟"
+                                        className={`w-full text-center border-2 rounded-md py-0.5 text-sm font-mono focus:outline-none focus:border-blue-400 ${
+                                          isGraded
+                                            ? (isCorrect
+                                              ? 'bg-green-50 border-green-500 text-green-700'
+                                              : 'bg-red-50 border-red-400 text-red-700')
+                                            : 'bg-white border-gray-300'
+                                        }`}
+                                      />
+                                      {isGraded && !isCorrect && (
+                                        <span className="text-[10px] text-green-600 block text-center font-bold mt-0.5">{item.ans}</span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="h-6 text-green-600 pt-1 font-sans text-sm font-black">
+                                      {showAnswers ? item.ans : '..........'}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                         {/* Subtraction Column */}
                         <div className="space-y-4">
                           <p className="text-xs text-gray-500 font-bold border-r-2 border-red-500 pr-2">ثانياً: أوجد ناتج الطرح رأسياً:</p>
                           <div className="flex justify-around gap-4">
-                            {q.verticalSub?.map((item, idx) => (
-                              <div key={idx} className="flex flex-col items-end font-mono font-bold text-lg border-2 border-gray-100 p-4 rounded-xl w-24 bg-gray-50/50 shadow-sm">
-                                <span className="tracking-widest">{item.num1}</span>
-                                <span className="tracking-widest border-b-2 border-gray-400 pb-1 w-full text-right flex justify-between">
-                                  <span>-</span>
-                                  <span>{item.num2}</span>
-                                </span>
-                                <span className="h-6 text-green-600 pt-1 font-sans text-sm font-black">
-                                  {showAnswers ? item.ans : '..........'}
-                                </span>
-                              </div>
-                            ))}
+                            {q.verticalSub?.map((item, idx) => {
+                              const stdAnswer = studentAnswers[`${q.id}-sub-${idx}`] || '';
+                              const isCorrect = toStandardDigits(stdAnswer.trim()) === toStandardDigits(item.ans.trim());
+                              return (
+                                <div key={idx} className="flex flex-col items-end font-mono font-bold text-lg border-2 border-gray-100 p-4 rounded-xl w-24 bg-gray-50/50 shadow-sm relative">
+                                  <span className="tracking-widest">{item.num1}</span>
+                                  <span className="tracking-widest border-b-2 border-gray-400 pb-1 w-full text-right flex justify-between">
+                                    <span>-</span>
+                                    <span>{item.num2}</span>
+                                  </span>
+                                  {studentMode ? (
+                                    <div className="w-full mt-1.5">
+                                      <input
+                                        type="text"
+                                        disabled={isGraded}
+                                        value={stdAnswer}
+                                        onChange={(e) => setStudentAnswers(prev => ({ ...prev, [`${q.id}-sub-${idx}`]: e.target.value }))}
+                                        placeholder="؟"
+                                        className={`w-full text-center border-2 rounded-md py-0.5 text-sm font-mono focus:outline-none focus:border-blue-400 ${
+                                          isGraded
+                                            ? (isCorrect
+                                              ? 'bg-green-50 border-green-500 text-green-700'
+                                              : 'bg-red-50 border-red-400 text-red-700')
+                                            : 'bg-white border-gray-300'
+                                        }`}
+                                      />
+                                      {isGraded && !isCorrect && (
+                                        <span className="text-[10px] text-green-600 block text-center font-bold mt-0.5">{item.ans}</span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="h-6 text-green-600 pt-1 font-sans text-sm font-black">
+                                      {showAnswers ? item.ans : '..........'}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       </div>
@@ -1231,15 +1482,44 @@ export default function WorksheetGenerator({
                     {q.type === 'compare_sort' && (
                       <div className="space-y-6 pr-4">
                         <div className="grid grid-cols-2 gap-x-12 gap-y-3">
-                          {q.compareItems?.map((item, idx) => (
-                            <div key={idx} className="flex items-center justify-between text-sm font-bold p-1">
-                              <span className="font-mono text-base">{item.num1}</span>
-                              <span className="w-12 h-8 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center font-black text-blue-600 text-lg bg-white">
-                                {showAnswers ? item.correct : ''}
-                              </span>
-                              <span className="font-mono text-base">{item.num2}</span>
-                            </div>
-                          ))}
+                          {q.compareItems?.map((item, idx) => {
+                            const stdAnswer = studentAnswers[`${q.id}-compare-${idx}`] || '';
+                            const isCorrect = stdAnswer === item.correct;
+                            return (
+                              <div key={idx} className="flex items-center justify-between text-sm font-bold p-1">
+                                <span className="font-mono text-base">{item.num1}</span>
+                                {studentMode ? (
+                                  <div className="flex flex-col items-center">
+                                    <select
+                                      disabled={isGraded}
+                                      value={stdAnswer}
+                                      onChange={(e) => setStudentAnswers(prev => ({ ...prev, [`${q.id}-compare-${idx}`]: e.target.value }))}
+                                      className={`w-14 h-8 text-center border-2 rounded-lg text-base font-black focus:outline-none focus:border-blue-400 ${
+                                        isGraded
+                                          ? (isCorrect
+                                            ? 'bg-green-50 border-green-500 text-green-700'
+                                            : 'bg-red-50 border-red-400 text-red-700')
+                                          : 'bg-white border-gray-300'
+                                      }`}
+                                    >
+                                      <option value="">؟</option>
+                                      <option value=">">&gt;</option>
+                                      <option value="<">&lt;</option>
+                                      <option value="=">=</option>
+                                    </select>
+                                    {isGraded && !isCorrect && (
+                                      <span className="text-xs text-green-600 font-black mt-0.5">{item.correct}</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="w-12 h-8 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center font-black text-blue-600 text-lg bg-white">
+                                    {showAnswers ? item.correct : ''}
+                                  </span>
+                                )}
+                                <span className="font-mono text-base">{item.num2}</span>
+                              </div>
+                            );
+                          })}
                         </div>
                         {q.sortItems && (
                           <div className="p-3 bg-blue-50/30 border border-blue-100 rounded-xl space-y-2">
@@ -1249,9 +1529,32 @@ export default function WorksheetGenerator({
                                 <span key={idx} className="px-2.5 py-1 bg-white border border-gray-200 rounded-lg font-mono font-bold text-sm shadow-sm">{n}</span>
                               ))}
                             </div>
-                            <p className="text-xs text-gray-500 font-bold pt-1">
-                              الترتيب الصحيح: <span className="font-mono text-blue-700 font-black">{showAnswers ? q.sortItems.sorted.join(' ➔ ') : '........ ➔ ........ ➔ ........ ➔ ........ ➔ ........'}</span>
-                            </p>
+                            {studentMode ? (
+                              <div className="space-y-2 mt-2">
+                                <p className="text-xs text-purple-950 font-bold">اكتب الأرقام مرتبة تصاعدياً من اليمين إلى اليسار (افصل بينها بمسافة أو فاصلة):</p>
+                                <input
+                                  type="text"
+                                  disabled={isGraded}
+                                  value={studentAnswers[`${q.id}-sort`] || ''}
+                                  onChange={(e) => setStudentAnswers(prev => ({ ...prev, [`${q.id}-sort`]: e.target.value }))}
+                                  placeholder="مثال: 101 ، 105 ، 120 ..."
+                                  className={`w-full p-2 border-2 rounded-lg text-xs font-mono text-center focus:outline-none focus:border-blue-400 ${
+                                    isGraded
+                                      ? (isSortAnswerCorrect(studentAnswers[`${q.id}-sort`], q.sortItems.sorted)
+                                        ? 'bg-green-50 border-green-500 text-green-700'
+                                        : 'bg-red-50 border-red-400 text-red-700')
+                                      : 'bg-white border-gray-300'
+                                  }`}
+                                />
+                                {isGraded && !isSortAnswerCorrect(studentAnswers[`${q.id}-sort`], q.sortItems.sorted) && (
+                                  <p className="text-[11px] text-green-600 font-bold mt-1">الترتيب الصحيح: {q.sortItems.sorted.join(' ➔ ')}</p>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-gray-500 font-bold pt-1">
+                                الترتيب الصحيح: <span className="font-mono text-blue-700 font-black">{showAnswers ? q.sortItems.sorted.join(' ➔ ') : '........ ➔ ........ ➔ ........ ➔ ........ ➔ ........'}</span>
+                              </p>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1262,6 +1565,8 @@ export default function WorksheetGenerator({
                       <div className="space-y-6 pr-4">
                         {q.abacusNum?.map((item, idx) => {
                           const isFraction = item.val.includes('fraction');
+                          const stdAnswer = studentAnswers[`${q.id}-abacus-${idx}`] || '';
+                          const isCorrect = toStandardDigits(stdAnswer).trim() === toStandardDigits(item.val).trim();
                           return (
                             <div key={idx} className="flex flex-col md:flex-row items-center gap-6 p-4 bg-gray-50/50 rounded-2xl border border-gray-100">
                               {isFraction ? (
@@ -1315,9 +1620,32 @@ export default function WorksheetGenerator({
                               
                               <div className="flex-1 space-y-2">
                                 <p className="text-sm font-black text-gray-700">{item.label}</p>
-                                <div className="text-xs font-bold text-gray-500">
-                                  الإجابة الصحيحة: <span className="font-mono text-green-700 font-black">{showAnswers ? item.val : '....................'}</span>
-                                </div>
+                                {studentMode ? (
+                                  <div className="space-y-1">
+                                    <label className="text-xs font-bold text-gray-400 block">اكتب الإجابة هنا:</label>
+                                    <input
+                                      type="text"
+                                      disabled={isGraded}
+                                      value={stdAnswer}
+                                      onChange={(e) => setStudentAnswers(prev => ({ ...prev, [`${q.id}-abacus-${idx}`]: e.target.value }))}
+                                      placeholder="اكتب الإجابة هنا..."
+                                      className={`w-full max-w-[200px] p-2 border-2 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-400 ${
+                                        isGraded
+                                          ? (isCorrect
+                                            ? 'bg-green-50 border-green-500 text-green-700'
+                                            : 'bg-red-50 border-red-400 text-red-700')
+                                          : 'bg-white border-gray-300'
+                                      }`}
+                                    />
+                                    {isGraded && !isCorrect && (
+                                      <span className="text-xs text-green-600 block font-bold">الإجابة الصحيحة: {item.val}</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="text-xs font-bold text-gray-500">
+                                    الإجابة الصحيحة: <span className="font-mono text-green-700 font-black">{showAnswers ? item.val : '....................'}</span>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           );
@@ -1325,12 +1653,38 @@ export default function WorksheetGenerator({
                         
                         {/* Companion Place-Value/Equations Fills */}
                         <div className="space-y-2 pr-2">
-                          {q.fills?.map((f, fIdx) => (
-                            <div key={fIdx} className="text-sm font-bold text-gray-700 flex items-center justify-between">
-                              <span>({fIdx + 1}) {f.text}</span>
-                              {showAnswers && <span className="text-green-700 font-black bg-green-50 px-2 py-0.5 rounded border border-green-200">[{f.correct}]</span>}
-                            </div>
-                          ))}
+                          {q.fills?.map((f, fIdx) => {
+                            const stdAnswer = studentAnswers[`${q.id}-abacusFill-${fIdx}`] || '';
+                            const isCorrect = toStandardDigits(stdAnswer).trim() === toStandardDigits(f.correct).trim();
+                            return (
+                              <div key={fIdx} className="text-sm font-bold text-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-1.5 bg-white rounded-lg border border-gray-100 px-3 py-1.5">
+                                <span>({fIdx + 1}) {f.text}</span>
+                                {studentMode ? (
+                                  <div className="flex flex-col items-end">
+                                    <input
+                                      type="text"
+                                      disabled={isGraded}
+                                      value={stdAnswer}
+                                      onChange={(e) => setStudentAnswers(prev => ({ ...prev, [`${q.id}-abacusFill-${fIdx}`]: e.target.value }))}
+                                      placeholder="الفراغ"
+                                      className={`w-36 p-1 border-2 rounded-lg text-xs text-center font-bold focus:outline-none focus:border-blue-400 ${
+                                        isGraded
+                                          ? (isCorrect
+                                            ? 'bg-green-50 border-green-500 text-green-700'
+                                            : 'bg-red-50 border-red-400 text-red-700')
+                                          : 'bg-white border-gray-300'
+                                      }`}
+                                    />
+                                    {isGraded && !isCorrect && (
+                                      <span className="text-[10px] text-green-600 font-bold mt-0.5">[{f.correct}]</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  showAnswers && <span className="text-green-700 font-black bg-green-50 px-2 py-0.5 rounded border border-green-200">[{f.correct}]</span>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -1340,12 +1694,38 @@ export default function WorksheetGenerator({
                       <div className="space-y-6 pr-4">
                         {/* Multiplication math boxes */}
                         <div className="grid grid-cols-2 gap-4">
-                          {q.multBoxes?.map((box, bIdx) => (
-                            <div key={bIdx} className="flex items-center gap-2 p-2 bg-amber-50/20 border border-amber-100 rounded-xl">
-                              <span className="text-sm font-bold font-mono">{box.text}</span>
-                              {showAnswers && <span className="text-xs font-black text-green-700 bg-green-50 px-1.5 py-0.5 rounded">[{box.correct}]</span>}
-                            </div>
-                          ))}
+                          {q.multBoxes?.map((box, bIdx) => {
+                            const stdAnswer = studentAnswers[`${q.id}-mult-${bIdx}`] || '';
+                            const isCorrect = toStandardDigits(stdAnswer).trim() === toStandardDigits(box.correct).trim();
+                            return (
+                              <div key={bIdx} className="flex items-center justify-between p-2.5 bg-amber-50/20 border border-amber-100 rounded-xl gap-2">
+                                <span className="text-sm font-bold font-mono">{box.text}</span>
+                                {studentMode ? (
+                                  <div className="flex flex-col items-end shrink-0">
+                                    <input
+                                      type="text"
+                                      disabled={isGraded}
+                                      value={stdAnswer}
+                                      onChange={(e) => setStudentAnswers(prev => ({ ...prev, [`${q.id}-mult-${bIdx}`]: e.target.value }))}
+                                      placeholder="الناتج"
+                                      className={`w-16 p-1 border-2 rounded-lg text-xs text-center font-bold focus:outline-none focus:border-blue-400 ${
+                                        isGraded
+                                          ? (isCorrect
+                                            ? 'bg-green-50 border-green-500 text-green-700'
+                                            : 'bg-red-50 border-red-400 text-red-700')
+                                          : 'bg-white border-gray-300'
+                                      }`}
+                                    />
+                                    {isGraded && !isCorrect && (
+                                      <span className="text-[10px] text-green-600 font-bold mt-0.5">[{box.correct}]</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  showAnswers && <span className="text-xs font-black text-green-700 bg-green-50 px-1.5 py-0.5 rounded">[{box.correct}]</span>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
 
                         {/* Division Grid Table & Sidebar Box */}
@@ -1366,11 +1746,37 @@ export default function WorksheetGenerator({
                                 <tbody>
                                   <tr className="border-t border-gray-300">
                                     <th className="py-2 px-1 border-r border-gray-300 font-black text-xs text-gray-600 bg-blue-50/20">{q.divGrid?.divisor}</th>
-                                    {q.divGrid?.quotients.map((quotient, qIdx) => (
-                                      <td key={qIdx} className="py-2 border-r border-gray-300 font-mono font-bold text-sm text-blue-700">
-                                        {showAnswers ? quotient : '.....'}
-                                      </td>
-                                    ))}
+                                    {q.divGrid?.quotients.map((quotient, qIdx) => {
+                                      const stdAnswer = studentAnswers[`${q.id}-div-${qIdx}`] || '';
+                                      const isCorrect = toStandardDigits(stdAnswer).trim() === toStandardDigits(quotient).trim();
+                                      return (
+                                        <td key={qIdx} className="py-1 border-r border-gray-300 font-mono font-bold text-sm text-blue-700">
+                                          {studentMode ? (
+                                            <div className="flex flex-col items-center justify-center p-0.5">
+                                              <input
+                                                type="text"
+                                                disabled={isGraded}
+                                                value={stdAnswer}
+                                                onChange={(e) => setStudentAnswers(prev => ({ ...prev, [`${q.id}-div-${qIdx}`]: e.target.value }))}
+                                                placeholder="؟"
+                                                className={`w-12 text-center border-2 rounded p-0.5 text-xs font-bold focus:outline-none focus:border-blue-400 ${
+                                                  isGraded
+                                                    ? (isCorrect
+                                                      ? 'bg-green-50 border-green-500 text-green-700'
+                                                      : 'bg-red-50 border-red-400 text-red-700')
+                                                    : 'bg-white border-gray-300'
+                                                }`}
+                                              />
+                                              {isGraded && !isCorrect && (
+                                                <span className="text-[10px] text-green-600 font-black mt-0.5">{quotient}</span>
+                                              )}
+                                            </div>
+                                          ) : (
+                                            showAnswers ? quotient : '.....'
+                                          )}
+                                        </td>
+                                      );
+                                    })}
                                   </tr>
                                 </tbody>
                               </table>
@@ -1380,15 +1786,45 @@ export default function WorksheetGenerator({
                           {/* Side Choices Box */}
                           <div className="p-3 bg-purple-50/30 border border-purple-100 rounded-xl space-y-2">
                             <p className="text-[10px] text-purple-900 font-black">اختر العدد المناسب وضعه في [ ] :</p>
-                            {q.sideMatch?.map((sm, smIdx) => (
-                              <div key={smIdx} className="text-xs font-bold text-gray-600 space-y-1">
-                                <div className="flex justify-between items-center bg-white p-1 rounded border border-gray-100">
-                                  <span>الخيارات: ({sm.val1})</span>
-                                  <span className="text-blue-700 font-bold">{sm.equation}</span>
+                            {q.sideMatch?.map((sm, smIdx) => {
+                              const optionsList = sm.val1.split('،').map(o => o.trim()).filter(Boolean);
+                              const stdAnswer = studentAnswers[`${q.id}-sideMatch-${smIdx}`] || '';
+                              const isCorrect = toStandardDigits(stdAnswer).trim() === toStandardDigits(sm.correct).trim();
+                              return (
+                                <div key={smIdx} className="text-xs font-bold text-gray-600 space-y-1">
+                                  <div className="flex justify-between items-center bg-white p-1.5 rounded border border-gray-100 gap-1">
+                                    <span className="text-blue-700 font-bold font-mono">{sm.equation}</span>
+                                    {studentMode ? (
+                                      <div className="flex flex-col items-end">
+                                        <select
+                                          disabled={isGraded}
+                                          value={stdAnswer}
+                                          onChange={(e) => setStudentAnswers(prev => ({ ...prev, [`${q.id}-sideMatch-${smIdx}`]: e.target.value }))}
+                                          className={`p-1 border border-gray-300 rounded text-xs font-bold focus:outline-none focus:border-blue-400 ${
+                                            isGraded
+                                              ? (isCorrect
+                                                ? 'bg-green-50 border-green-500 text-green-700'
+                                                : 'bg-red-50 border-red-400 text-red-700')
+                                              : 'bg-white'
+                                          }`}
+                                        >
+                                          <option value="">؟</option>
+                                          {optionsList.map((opt, oIdx) => (
+                                            <option key={oIdx} value={opt}>{opt}</option>
+                                          ))}
+                                        </select>
+                                        {isGraded && !isCorrect && (
+                                          <span className="text-[10px] text-green-600 font-bold mt-0.5">[{sm.correct}]</span>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-gray-400">({sm.val1})</span>
+                                    )}
+                                  </div>
+                                  {!studentMode && showAnswers && <span className="text-[10px] text-green-700 font-black bg-green-50 px-1 rounded">الجواب: [{sm.correct}]</span>}
                                 </div>
-                                {showAnswers && <span className="text-[10px] text-green-700 font-black bg-green-50 px-1 rounded">الجواب: [{sm.correct}]</span>}
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       </div>
@@ -1400,35 +1836,96 @@ export default function WorksheetGenerator({
                         {/* Multiple Choices */}
                         <div className="space-y-3">
                           <p className="text-xs text-gray-500 font-black border-r-2 border-purple-500 pr-2">أولاً: اختر البديل الصحيح من بين البدائل الثلاثة:</p>
-                          {q.mcqs?.map((mcq, mIdx) => (
-                            <div key={mIdx} className="text-sm font-bold text-gray-700 space-y-1.5">
-                              <div className="flex justify-between">
-                                <span>({mIdx + 1}) {mcq.text}</span>
-                                {showAnswers && <span className="text-green-700 font-black bg-green-50 px-1.5 rounded text-xs">[{mcq.correct}]</span>}
-                              </div>
-                              <div className="flex gap-6 pr-4 text-xs font-semibold text-gray-500">
-                                {mcq.options.map((opt, oIdx) => (
-                                  <label key={oIdx} className="flex items-center gap-1.5 cursor-pointer">
-                                    <span className="w-4 h-4 rounded-full border border-gray-300 flex items-center justify-center text-[10px] bg-white">
-                                      {oIdx === 0 ? 'أ' : oIdx === 1 ? 'ب' : 'ج'}
+                          {q.mcqs?.map((mcq, mIdx) => {
+                            const selectedOptionCode = studentAnswers[`${q.id}-mcq-${mIdx}`] || '';
+                            const isCorrect = selectedOptionCode === mcq.correct;
+                            return (
+                              <div key={mIdx} className="text-sm font-bold text-gray-700 space-y-1.5">
+                                <div className="flex justify-between">
+                                  <span>({mIdx + 1}) {mcq.text}</span>
+                                  {isGraded && (
+                                    <span className={`text-xs px-2.5 py-0.5 rounded font-black ${
+                                      isCorrect
+                                        ? 'bg-green-100 text-green-700'
+                                        : 'bg-red-100 text-red-700'
+                                    }`}>
+                                      {isCorrect ? 'إجابة صحيحة ✔️' : `الإجابة: [${mcq.correct}] ❌`}
                                     </span>
-                                    <span>{opt}</span>
-                                  </label>
-                                ))}
+                                  )}
+                                  {!studentMode && showAnswers && <span className="text-green-700 font-black bg-green-50 px-1.5 rounded text-xs">[{mcq.correct}]</span>}
+                                </div>
+                                <div className="flex gap-6 pr-4 text-xs font-semibold text-gray-500">
+                                  {mcq.options.map((opt, oIdx) => {
+                                    const optCode = oIdx === 0 ? 'أ' : oIdx === 1 ? 'ب' : 'ج';
+                                    const isSelected = selectedOptionCode === optCode;
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={oIdx}
+                                        disabled={isGraded}
+                                        onClick={() => setStudentAnswers(prev => ({ ...prev, [`${q.id}-mcq-${mIdx}`]: optCode }))}
+                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 transition-all ${
+                                          studentMode
+                                            ? isSelected
+                                              ? isGraded
+                                                ? optCode === mcq.correct
+                                                  ? 'border-green-500 bg-green-50 text-green-700'
+                                                  : 'border-red-500 bg-red-50 text-red-700'
+                                                : 'border-blue-500 bg-blue-50/50 text-blue-700 shadow-sm scale-[1.02]'
+                                              : 'border-gray-200 bg-white hover:border-gray-300 text-gray-600'
+                                            : 'border-transparent bg-transparent pointer-events-none'
+                                        }`}
+                                      >
+                                        <span className={`w-5 h-5 rounded-full border flex items-center justify-center text-xs font-bold ${
+                                          isSelected ? 'bg-current text-white border-transparent' : 'bg-gray-100 text-gray-700 border-gray-300'
+                                        }`}>
+                                          {optCode}
+                                        </span>
+                                        <span>{opt}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
 
                         {/* Fill blanks */}
                         <div className="space-y-3">
                           <p className="text-xs text-gray-500 font-black border-r-2 border-orange-500 pr-2">ثانياً: أكمل العبارات الحسابية بالفراغ المناسب:</p>
-                          {q.fills?.map((f, fIdx) => (
-                            <div key={fIdx} className="text-sm font-bold text-gray-700 flex justify-between items-center">
-                              <span>({fIdx + 1}) {f.text}</span>
-                              {showAnswers && <span className="text-green-700 font-black bg-green-50 px-1.5 rounded text-xs">[{f.correct}]</span>}
-                            </div>
-                          ))}
+                          {q.fills?.map((f, fIdx) => {
+                            const stdAnswer = studentAnswers[`${q.id}-fill-${fIdx}`] || '';
+                            const isCorrect = toStandardDigits(stdAnswer).trim() === toStandardDigits(f.correct).trim();
+                            return (
+                              <div key={fIdx} className="text-sm font-bold text-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-1 bg-white rounded-lg border border-gray-100 px-3 py-1.5">
+                                <span>({fIdx + 1}) {f.text}</span>
+                                {studentMode ? (
+                                  <div className="flex flex-col items-end">
+                                    <input
+                                      type="text"
+                                      disabled={isGraded}
+                                      value={stdAnswer}
+                                      onChange={(e) => setStudentAnswers(prev => ({ ...prev, [`${q.id}-fill-${fIdx}`]: e.target.value }))}
+                                      placeholder="اكتب إجابتك هنا"
+                                      className={`w-40 p-1.5 border-2 rounded-lg text-xs text-center font-bold focus:outline-none focus:border-blue-400 ${
+                                        isGraded
+                                          ? (isCorrect
+                                            ? 'bg-green-50 border-green-500 text-green-700'
+                                            : 'bg-red-50 border-red-400 text-red-700')
+                                          : 'bg-white border-gray-300'
+                                      }`}
+                                    />
+                                    {isGraded && !isCorrect && (
+                                      <span className="text-[10px] text-green-600 font-bold mt-0.5">[{f.correct}]</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  showAnswers && <span className="text-green-700 font-black bg-green-50 px-1.5 rounded text-xs">[{f.correct}]</span>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
