@@ -52,7 +52,10 @@ body {
   #root,
   #root > div,
   #root > div > div,
-  #root > div > div > main {
+  #root > div > div > main,
+  .sudan-app-root,
+  .sudan-main-wrapper,
+  .sudan-main-content {
     display: block !important;
     height: auto !important;
     min-height: 0 !important;
@@ -76,7 +79,8 @@ body {
   }
 
   /* Main wrapper containing generated sheets */
-  #worksheets-generator-tab > div:last-child {
+  #worksheets-generator-tab > div:last-child,
+  .sudan-print-pages-wrapper {
     display: block !important;
     width: 100% !important;
     padding: 0 !important;
@@ -89,7 +93,8 @@ body {
   }
 
   /* Ensure the list container does not restrict size or scroll */
-  #worksheets-generator-tab > div:last-child > div:last-child {
+  #worksheets-generator-tab > div:last-child > div:last-child,
+  .sudan-print-pages-container {
     display: block !important;
     width: 100% !important;
     max-height: none !important;

@@ -245,7 +245,7 @@ export default function App() {
   };
 
   return (
-    <div className="w-full h-screen bg-[#FFFBEB] flex flex-col lg:flex-row-reverse font-sans overflow-hidden text-right" dir="rtl">
+    <div className="sudan-app-root w-full h-screen bg-[#FFFBEB] flex flex-col lg:flex-row-reverse font-sans overflow-hidden text-right" dir="rtl">
       {/* Sidebar navigation */}
       <Sidebar
         user={user}
@@ -260,7 +260,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
+      <div className="sudan-main-wrapper flex-1 flex flex-col h-full overflow-hidden">
         {/* Top Header */}
         <header className="bg-white border-b-2 border-yellow-100 p-5 flex justify-between items-center shrink-0">
           <div className="text-right">
@@ -282,7 +282,7 @@ export default function App() {
         </header>
 
         {/* Dynamic Inner Tab Area */}
-        <main className="flex-1 overflow-hidden flex flex-col">
+        <main className="sudan-main-content flex-1 overflow-hidden flex flex-col">
           {activeQuizScope ? (
             /* ACTIVE QUIZ SCREEN OVERLAY */
             <InteractiveQuiz

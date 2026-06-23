@@ -2,7 +2,7 @@ import { Lesson, Unit, UserProfile } from '../types';
 import { curriculumUnits, diagramConfigs, mockMatchingData, diagramConfigs as allDiagrams, mockMatchingData as allMatches, questionPool } from '../data/curriculumData';
 import { Sparkles, Printer, FileText, Download, CheckSquare, Settings, Lock, Unlock, Eye, HelpCircle } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useState, useRef, FormEvent } from 'react';
+import { useState, useRef, FormEvent, Fragment } from 'react';
 
 interface WorksheetGeneratorProps {
   user: UserProfile;
@@ -13,7 +13,7 @@ interface WorksheetGeneratorProps {
 
 interface GeneratedQuestion {
   id: string;
-  type: 'true_false' | 'fill_blank' | 'matching' | 'label_diagram';
+  type: string;
   text: string;
   correctAnswer?: string;
   options?: string[];
@@ -21,6 +21,18 @@ interface GeneratedQuestion {
   rightItems?: string[];
   diagramImg?: string;
   labels?: { id: string; name: string; x: number; y: number }[];
+  
+  // High-fidelity Sudanese math structures
+  verticalAdd?: { num1: string; num2: string; ans: string }[];
+  verticalSub?: { num1: string; num2: string; ans: string }[];
+  compareItems?: { num1: string; num2: string; correct: '<' | '>' | '=' }[];
+  sortItems?: { raw: string[]; sorted: string[] };
+  abacusNum?: { val: string; label: string; digits: string[] }[];
+  divGrid?: { divisor: string; dividends: string[]; quotients: string[] };
+  multBoxes?: { text: string; correct: string }[];
+  mcqs?: { text: string; options: string[]; correct: string }[];
+  fills?: { text: string; correct: string }[];
+  sideMatch?: { val1: string; equation: string; correct: string }[];
 }
 
 export default function WorksheetGenerator({
@@ -30,7 +42,7 @@ export default function WorksheetGenerator({
   onUnlockWatermark
 }: WorksheetGeneratorProps) {
   // Config states
-  const [selectedTypes, setSelectedTypes] = useState<string[]>(['true_false', 'fill_blank', 'matching', 'label_diagram']);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(['vertical_ops', 'compare_sort', 'abacus_pv', 'mult_div_grids', 'mcq_fill_blank']);
   const [scopeType, setScopeType] = useState<'all' | 'favorites' | 'unit' | 'lesson'>('all');
   const [selectedUnitId, setSelectedUnitId] = useState<string>(curriculumUnits[0].id);
   const [selectedLessonId, setSelectedLessonId] = useState<string>(curriculumUnits[0].lessons[0].id);
@@ -51,10 +63,11 @@ export default function WorksheetGenerator({
 
   // Types definitions
   const questionTypes = [
-    { id: 'true_false', label: 'صح أم خطأ ❌ / ✅' },
-    { id: 'fill_blank', label: 'أكمل الفراغ ✏️' },
-    { id: 'matching', label: 'توصيل الكلمات 🔗' },
-    { id: 'label_diagram', label: 'إيضاح مكونات الرسمة 🎨' }
+    { id: 'vertical_ops', label: 'العمليات الحسابية الرأسية (جمع وطرح) ➕' },
+    { id: 'compare_sort', label: 'المقارنة والترتيب (ضع < > = وترتيب تصاعدي) ⚖️' },
+    { id: 'abacus_pv', label: 'التمثيل على المعداد والقيمة المنزلية 🧮' },
+    { id: 'mult_div_grids', label: 'جداول الضرب والقسمة بمربعات فارغة ✖️' },
+    { id: 'mcq_fill_blank', label: 'أكمل واختيار من متعدد (أ، ب، ج) 📝' }
   ];
 
   // Helper to get active units / lessons list
@@ -78,597 +91,772 @@ export default function WorksheetGenerator({
     setIsGenerating(true);
 
     setTimeout(() => {
-      // Track already selected elements globally for this document generation run
-      const usedTFTexts = new Set<string>();
-      const usedFillTexts = new Set<string>();
-      const usedMatchingIds = new Set<string>();
-      const usedDiagramIds = new Set<string>();
+      // Helper to convert standard English numbers to Arabic-Indic digits (Sudanese schools style)
+      const toArabicDigits = (numStr: string | number): string => {
+        const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+        return String(numStr).replace(/[0-9]/g, (w) => arabicDigits[parseInt(w)]);
+      };
 
-      const staticTFPool = [
-        // Standard + Easy
-        { text: 'أي عدد نضربه في صفر، يكون الناتج دائماً صفراً.', correct: 'صح', isReal: false, diff: 'easy', unitId: 'unit2', lessonId: 'u2-l1' },
-        { text: 'يكتب العدد (سبعة عشر) بالأرقام هكذا: 17', correct: 'صح', isReal: false, diff: 'easy', unitId: 'unit1', lessonId: 'u1-l1' },
-        { text: 'اليوم الكامل يحتوي على 24 ساعة.', correct: 'صح', isReal: false, diff: 'easy', unitId: 'unit5', lessonId: 'u5-l2' },
-
-        // Real-World + Easy
-        { text: 'إذا كان مع أحمد 5 تفاحات وأعطى أخته 3 تفاحات، يتبقى معه تفاحتان اثنتان.', correct: 'صح', isReal: true, diff: 'easy', unitId: 'unit1', lessonId: 'u1-l3' },
-        { text: 'ثمن قطعة الحلوى 5 جنيهات، إذا اشتريت قطعتين تدفع 15 جنيهاً.', correct: 'خطأ', isReal: true, diff: 'easy', unitId: 'unit2', lessonId: 'u2-l2' },
-
-        // Standard + Medium
-        { text: 'يكتب العدد (ألفان وثلاثة وسبعون) بالأرقام هكذا: 2073', correct: 'صح', isReal: false, diff: 'medium', unitId: 'unit1', lessonId: 'u1-l1' },
-        { text: 'المستطيل هو شكل رباعي فيه كل أضلاعه الأربعة متساوية تماماً في الطول.', correct: 'خطأ', isReal: false, diff: 'medium', unitId: 'unit6', lessonId: 'u6-l2' },
-        { text: 'عند ضرب أي عدد في 100، نكتب نفس العدد ونضع صفرين على يمينه.', correct: 'صح', isReal: false, diff: 'medium', unitId: 'unit2', lessonId: 'u2-l5' },
-
-        // Real-World + Medium
-        { text: 'اشترى علي 3 كراسات رسم، إذا كان ثمن الكراسة 6 جنيهات، يدفع للبائع 18 جنيهاً.', correct: 'صح', isReal: true, diff: 'medium', unitId: 'unit2', lessonId: 'u2-l2' },
-        { text: 'وزعت فاطمة 20 حبة تمر على 4 من صديقاتها بالتساوي، نصيب كل واحدة هو 5 تمرات.', correct: 'صح', isReal: true, diff: 'medium', unitId: 'unit3', lessonId: 'u3-l1' },
-
-        // Standard + Hard
-        { text: 'الكسر 1/2 (النصف) أصغر من الكسر 1/4 (الربع) لأن الرقم 4 أكبر من 2.', correct: 'خطأ', isReal: false, diff: 'hard', unitId: 'unit4', lessonId: 'u4-l3' },
-        { text: 'الخط المستقيم له نقطة بداية ونقطة نهاية محددة.', correct: 'خطأ', isReal: false, diff: 'hard', unitId: 'unit6', lessonId: 'u6-l1' },
-
-        // Real-World + Hard
-        { text: 'يمشي عداء مسافة ميل واحد يومياً، وهو ما يعادل 1760 ياردة تماماً.', correct: 'صح', isReal: true, diff: 'hard', unitId: 'unit5', lessonId: 'u5-l1' },
-        { text: 'إذا كان في خزان اللبن 5/6 السعة وتم بيع 1/6 السعة، يتبقى في الخزان ثلث السعة.', correct: 'خطأ', isReal: true, diff: 'hard', unitId: 'unit4', lessonId: 'u4-l3' }
-      ];
-
-      const staticFillPool = [
-        // Standard + Easy
-        { text: 'احسب ناتج الجمع البسيط: 5 + 4 = ........', correct: '9', isReal: false, diff: 'easy', unitId: 'unit1', lessonId: 'u1-l3' },
-        { text: 'العدد الفردي الذي يلي العدد 7 مباشرة هو ........', correct: '9', isReal: false, diff: 'easy', unitId: 'unit1', lessonId: 'u1-l1' },
-
-        // Real-World + Easy
-        { text: 'مع أحمد 10 جنيهات، اشترى عصير بـ 6 جنيهات، بقي معه ........ جنيهات.', correct: '4', isReal: true, diff: 'easy', unitId: 'unit1', lessonId: 'u1-l4' },
-        { text: 'في علبة التلوين 6 أقلام، في علبتين متطابقتين يوجد ........ قلماً.', correct: '12', isReal: true, diff: 'easy', unitId: 'unit2', lessonId: 'u2-l1' },
-
-        // Standard + Medium
-        { text: 'احسب ناتج الجمع التالي: 4126 + 1872 = ........', correct: '5998', isReal: false, diff: 'medium', unitId: 'unit1', lessonId: 'u1-l3' },
-        { text: 'احسب ناتج الطرح التالي: 5628 - 1313 = ........', correct: '4315', isReal: false, diff: 'medium', unitId: 'unit1', lessonId: 'u1-l4' },
-        { text: '9 × 9 = ........', correct: '81', isReal: false, diff: 'medium', unitId: 'unit2', lessonId: 'u2-l4' },
-
-        // Real-World + Medium
-        { text: 'وزع أب 35 جنيها بالتساوي على 5 من أبنائه، نصيب كل ابن هو ........ جنيهات.', correct: '7', isReal: true, diff: 'medium', unitId: 'unit3', lessonId: 'u3-l4' },
-        { text: 'تضع أمي 7 قطع بسكويت في كل طبق، في 6 أطباق تضع ........ قطعة بسكويت.', correct: '42', isReal: true, diff: 'medium', unitId: 'unit2', lessonId: 'u2-l2' },
-
-        // Standard + Hard
-        { text: 'القدم الواحد يحتوي على ........ بوصة.', correct: '12', isReal: false, diff: 'hard', unitId: 'unit5', lessonId: 'u5-l1' },
-        { text: 'ربع الساعة يحتوي على ........ دقيقة.', correct: '15', isReal: false, diff: 'hard', unitId: 'unit5', lessonId: 'u5-l2' },
-        { text: 'المثلث له ........ أضلاع و ........ رؤوس.', correct: '3 أضلاع و 3 رؤوس', isReal: false, diff: 'hard', unitId: 'unit6', lessonId: 'u6-l2' },
-        { text: 'في الكسر 3/4 ، يسمى الرقم 3 بالـ ........ والرقم 4 بالـ ........', correct: 'البسط ، المقام', isReal: false, diff: 'hard', unitId: 'unit4', lessonId: 'u4-l1' },
-
-        // Real-World + Hard
-        { text: 'اشترى النور سجادة مستطيلة طولها 4 أمتار وعرضها 2 متر، محيط هذه السجادة يساوي ........ أمتار.', correct: '12', isReal: true, diff: 'hard', unitId: 'unit6', lessonId: 'u6-l2' },
-        { text: 'إذا قطف مزارع 952 برتقالة ووزعها بالتساوي على 7 صناديق، تحتوي كل منها على ........ برتقالة.', correct: '136', isReal: true, diff: 'hard', unitId: 'unit3', lessonId: 'u3-l4' }
-      ];
-
-      const staticMatchingBlocks = [
-        {
-          id: 'match-units',
-          title: 'توصيل الوحدات بالقيم الصحيحة',
-          left: ['القدم الواحد', 'الياردة الواحدة', 'نصف الساعة', 'اليوم الكامل'],
-          right: ['24 ساعة', '12 بوصة', '30 دقيقة', '3 أقدام'],
-          correct: [1, 3, 2, 0]
-        },
-        {
-          id: 'match-shapes',
-          title: 'توصيل الأشكال الهندسية بخصائصها',
-          left: ['المربع', 'المثلث', 'المستطيل', 'الدائرة'],
-          right: ['له 3 أضلاع و 3 رؤوس', 'شكل رباعي جميع أضلاعه متساوية', 'ليس له أضلاع ولا رؤوس', 'كل ضلعين متقابلين متساويان'],
-          correct: [1, 0, 2, 3]
-        },
-        {
-          id: 'match-fractions',
-          title: 'توصيل الكسور بالكلمات المعبرة',
-          left: ['الكسر 1/2', 'الكسر 1/4', 'الكسر 3/4', 'الكسر 1/3'],
-          right: ['ثلاثة أرباع', 'ثلث', 'نصف', 'ربع'],
-          correct: [2, 3, 0, 1]
-        },
-        {
-          id: 'match-multiples',
-          title: 'توصيل مضاعفات الأعداد بنموذج القفز',
-          left: ['العد بالواحد', 'العد بالعشرة', 'العد بالمئة', 'العد بالألف'],
-          right: ['100، 200، 300', '1000، 2000، 3000', '1، 2، 3', '10، 20، 30'],
-          correct: [2, 3, 0, 1]
-        }
-      ];
-
-      const extendedDiagrams = [
-        {
-          id: 'diagram-abacus',
-          title: 'مكونات العداد (المعداد)',
-          image: 'abacus',
-          unitId: 'unit1',
-          labels: [
-            { id: '1', name: 'خانة الألوف', x: 20, y: 30 },
-            { id: '2', name: 'خانة المئات', x: 40, y: 30 },
-            { id: '3', name: 'خانة العشرات', x: 60, y: 30 },
-            { id: '4', name: 'خانة الآحاد', x: 80, y: 30 }
-          ]
-        },
-        {
-          id: 'diagram-placevalue',
-          title: 'جدول القيمة المنزلية للعدد',
-          image: 'placevalue',
-          unitId: 'unit1',
-          labels: [
-            { id: '1', name: 'خانة الآحاد', x: 20, y: 50 },
-            { id: '2', name: 'خانة العشرات', x: 40, y: 50 },
-            { id: '3', name: 'خانة المئات', x: 60, y: 50 },
-            { id: '4', name: 'خانة الألوف', x: 80, y: 50 }
-          ]
-        },
-        {
-          id: 'diagram-multiplication',
-          title: 'مكونات جملة الضرب ومجموعات العناصر',
-          image: 'multiplication',
-          unitId: 'unit2',
-          labels: [
-            { id: '1', name: 'عدد المجموعات المتساوية', x: 25, y: 50 },
-            { id: '2', name: 'عدد العناصر في كل مجموعة', x: 75, y: 50 },
-            { id: '3', name: 'الناتج الكلي (المجموع الكلي)', x: 50, y: 85 }
-          ]
-        },
-        {
-          id: 'diagram-division',
-          title: 'مكونات عملية القسمة الطويلة وعناصرها',
-          image: 'division',
-          unitId: 'unit3',
-          labels: [
-            { id: '1', name: 'المقسوم (العدد الكلي المراد تقسيمه)', x: 30, y: 35 },
-            { id: '2', name: 'المقسوم عليه', x: 70, y: 35 },
-            { id: '3', name: 'خارج (ناتج) القسمة', x: 50, y: 75 },
-            { id: '4', name: 'الباقي (إن وجد)', x: 50, y: 92 }
-          ]
-        },
-        {
-          id: 'diagram-fraction',
-          title: 'مكونات الكسر الاعتيادي',
-          image: 'fraction',
-          unitId: 'unit4',
-          labels: [
-            { id: '1', name: 'البسط (عدد الأجزاء الملونة)', x: 50, y: 15 },
-            { id: '2', name: 'خط الكسر', x: 50, y: 50 },
-            { id: '3', name: 'المقام (العدد الكلي للأجزاء)', x: 50, y: 85 }
-          ]
-        },
-        {
-          id: 'diagram-clock',
-          title: 'مكونات وعقارب الساعة',
-          image: 'clock',
-          unitId: 'unit5',
-          labels: [
-            { id: '1', name: 'شوكة الساعات (القصيرة)', x: 35, y: 45 },
-            { id: '2', name: 'شوكة الدقائق (الطويلة)', x: 65, y: 30 },
-            { id: '3', name: 'شوكة الثواني (الرفيعة)', x: 50, y: 70 }
-          ]
-        },
-        {
-          id: 'diagram-geometry',
-          title: 'مكونات الأشكال الهندسية ومحيطها',
-          image: 'geometry',
-          unitId: 'unit6',
-          labels: [
-            { id: '1', name: 'المستطيل (الطول والعرض)', x: 30, y: 35 },
-            { id: '2', name: 'المربع (أضلاع متطابقة)', x: 70, y: 35 },
-            { id: '3', name: 'المثلث (ثلاث زوايا)', x: 50, y: 75 }
-          ]
-        }
-      ];
-
-      // Check if a question belongs to the selected scope
-      const isItemInScope = (unitId: string, lessonId?: string): boolean => {
+      // Determine allowed units based on selected scope strictly
+      const getUnitsInScope = (): string[] => {
         if (scopeType === 'all') {
-          return true;
-        }
-        if (scopeType === 'favorites') {
-          if (lessonId) {
-            return favorites.includes(lessonId);
-          }
-          const unitLessons = curriculumUnits.find(u => u.id === unitId)?.lessons || [];
-          return unitLessons.some(l => favorites.includes(l.id));
+          return ['unit1', 'unit2', 'unit3', 'unit4', 'unit5', 'unit6'];
         }
         if (scopeType === 'unit') {
-          return unitId === selectedUnitId;
+          return [selectedUnitId];
         }
-        if (scopeType === 'lesson') {
-          if (lessonId) {
-            return lessonId === selectedLessonId;
-          }
-          return unitId === selectedUnitId;
-        }
-        return true;
-      };
-
-      const getActiveUnitId = (): string => {
-        if (scopeType === 'unit') return selectedUnitId;
         if (scopeType === 'lesson') {
           const matchedUnit = curriculumUnits.find(u => u.lessons.some(l => l.id === selectedLessonId));
-          if (matchedUnit) return matchedUnit.id;
+          return matchedUnit ? [matchedUnit.id] : ['unit1'];
         }
-        if (scopeType === 'favorites' && favorites.length > 0) {
-          const matchedUnit = curriculumUnits.find(u => u.lessons.some(l => favorites.includes(l.id)));
-          if (matchedUnit) return matchedUnit.id;
-        }
-        return 'unit1';
-      };
-
-      const getScopedTFPool = () => {
-        const filteredStatic = staticTFPool.filter(q => isItemInScope(q.unitId, q.lessonId));
-        const curQuestions = questionPool
-          .filter(q => q.type === 'boolean' && isItemInScope(q.unitId, q.lessonId))
-          .map(q => ({
-            text: q.text,
-            correct: q.correctAnswer === true ? 'صح' : 'خطأ',
-            isReal: false,
-            diff: q.score && q.score > 5 ? 'hard' : 'medium',
-            unitId: q.unitId || '',
-            lessonId: q.lessonId || ''
-          }));
-
-        const combined = [...filteredStatic, ...curQuestions];
-        let finalPool = combined;
-
-        if (realWorldOnly) {
-          const rw = combined.filter(q => q.isReal);
-          if (rw.length > 0) finalPool = rw;
-        }
-        const diffFiltered = finalPool.filter(q => q.diff === difficulty);
-        if (diffFiltered.length > 0) finalPool = diffFiltered;
-
-        return finalPool;
-      };
-
-      const getScopedFillPool = () => {
-        const filteredStatic = staticFillPool.filter(q => isItemInScope(q.unitId, q.lessonId));
-        const curQuestions = questionPool
-          .filter(q => q.type === 'fill' && isItemInScope(q.unitId, q.lessonId))
-          .map(q => ({
-            text: q.text,
-            correct: String(q.correctAnswer),
-            isReal: false,
-            diff: q.score && q.score > 5 ? 'hard' : 'medium',
-            unitId: q.unitId || '',
-            lessonId: q.lessonId || ''
-          }));
-
-        const combined = [...filteredStatic, ...curQuestions];
-        let finalPool = combined;
-
-        if (realWorldOnly) {
-          const rw = combined.filter(q => q.isReal);
-          if (rw.length > 0) finalPool = rw;
-        }
-        const diffFiltered = finalPool.filter(q => q.diff === difficulty);
-        if (diffFiltered.length > 0) finalPool = diffFiltered;
-
-        return finalPool;
-      };
-
-      const generateDynamicTF = (unitId: string): { text: string; correct: string } => {
-        let text = '';
-        let correct = 'صح';
-        let num1 = 0, num2 = 0, ans = 0;
-        const isTrue = Math.random() > 0.5;
-
-        switch (unitId) {
-          case 'unit1':
-            num1 = Math.floor(Math.random() * 900) + 100;
-            num2 = Math.floor(Math.random() * 900) + 100;
-            if (Math.random() > 0.5) {
-              ans = num1 + num2;
-              correct = isTrue ? 'صح' : 'خطأ';
-              const displayed = isTrue ? ans : ans + (Math.random() > 0.5 ? 10 : -10);
-              text = `ناتج عملية الجمع ${num1} + ${num2} هو ${displayed}.`;
-            } else {
-              if (num1 < num2) { const t = num1; num1 = num2; num2 = t; }
-              ans = num1 - num2;
-              correct = isTrue ? 'صح' : 'خطأ';
-              const displayed = isTrue ? ans : ans + (Math.random() > 0.5 ? 5 : -5);
-              text = `ناتج عملية الطرح ${num1} - ${num2} هو ${displayed}.`;
+        if (scopeType === 'favorites') {
+          if (favorites.length === 0) return ['unit1'];
+          const units = new Set<string>();
+          curriculumUnits.forEach(u => {
+            if (u.lessons.some(l => favorites.includes(l.id))) {
+              units.add(u.id);
             }
-            break;
-
-          case 'unit2':
-            num1 = Math.floor(Math.random() * 8) + 2;
-            num2 = Math.floor(Math.random() * 10);
-            ans = num1 * num2;
-            correct = isTrue ? 'صح' : 'خطأ';
-            const displayedMult = isTrue ? ans : ans + (Math.random() > 0.5 ? 2 : -2);
-            text = `ناتج عملية الضرب ${num1} × ${num2} هو ${displayedMult}.`;
-            break;
-
-          case 'unit3':
-            num2 = Math.floor(Math.random() * 8) + 2;
-            num1 = num2 * (Math.floor(Math.random() * 10) + 1);
-            ans = num1 / num2;
-            correct = isTrue ? 'صح' : 'خطأ';
-            const displayedDiv = isTrue ? ans : ans + (Math.random() > 0.5 ? 1 : -1);
-            text = `ناتج عملية القسمة ${num1} ÷ ${num2} هو ${displayedDiv}.`;
-            break;
-
-          case 'unit4':
-            num1 = Math.floor(Math.random() * 5) + 1;
-            num2 = num1 + Math.floor(Math.random() * 4) + 1;
-            if (Math.random() > 0.5) {
-              text = `في الكسر الاعتيادي ${num1}/${num2}، يسمى الرقم ${num1} بالبسط.`;
-              correct = 'صح';
-            } else {
-              text = `في الكسر الاعتيادي ${num1}/${num2}، يسمى الرقم ${num1} بالمقام.`;
-              correct = 'خطأ';
-            }
-            break;
-
-          case 'unit5':
-            if (Math.random() > 0.5) {
-              text = 'الياردة الواحدة تحتوي على 3 أقدام تماماً.';
-              correct = 'صح';
-            } else {
-              text = 'القدم الواحد يحتوي على 10 بوصات فقط.';
-              correct = 'خطأ';
-            }
-            break;
-
-          case 'unit6':
-            if (Math.random() > 0.5) {
-              text = 'المثلث هو شكل هندسي مغلق يحتوي على 3 أضلاع و 3 رؤوس.';
-              correct = 'صح';
-            } else {
-              text = 'المستطيل يتميز بأن جميع أضلاعه الأربعة متساوية في الطول.';
-              correct = 'خطأ';
-            }
-            break;
-
-          default:
-            text = 'أي عدد نضربه في صفر، يكون الناتج دائماً صفراً.';
-            correct = 'صح';
+          });
+          return Array.from(units);
         }
-
-        return { text, correct };
+        return ['unit1'];
       };
 
-      const generateDynamicFill = (unitId: string): { text: string; correct: string } => {
-        let text = '';
-        let correct = '';
-        let num1 = 0, num2 = 0, ans = 0;
-
-        switch (unitId) {
-          case 'unit1':
-            num1 = Math.floor(Math.random() * 900) + 100;
-            num2 = Math.floor(Math.random() * 900) + 100;
-            if (Math.random() > 0.5) {
-              correct = String(num1 + num2);
-              text = `احسب ناتج الجمع التالي: ${num1} + ${num2} = ........`;
-            } else {
-              if (num1 < num2) { const t = num1; num1 = num2; num2 = t; }
-              correct = String(num1 - num2);
-              text = `احسب ناتج الطرح التالي: ${num1} - ${num2} = ........`;
-            }
-            break;
-
-          case 'unit2':
-            num1 = Math.floor(Math.random() * 8) + 2;
-            num2 = Math.floor(Math.random() * 10);
-            correct = String(num1 * num2);
-            text = `احسب ناتج عملية الضرب التالية: ${num1} × ${num2} = ........`;
-            break;
-
-          case 'unit3':
-            num2 = Math.floor(Math.random() * 8) + 2;
-            ans = Math.floor(Math.random() * 9) + 1;
-            num1 = num2 * ans;
-            correct = String(ans);
-            text = `احسب ناتج عملية القسمة بدون باق التالية: ${num1} ÷ ${num2} = ........`;
-            break;
-
-          case 'unit4':
-            num1 = Math.floor(Math.random() * 5) + 1;
-            num2 = num1 + Math.floor(Math.random() * 4) + 1;
-            if (Math.random() > 0.5) {
-              correct = String(num1);
-              text = `في الكسر الاعتيادي ${num1}/${num2}، البسط هو الرقم ........`;
-            } else {
-              correct = String(num2);
-              text = `في الكسر الاعتيادي ${num1}/${num2}، المقام هو الرقم ........`;
-            }
-            break;
-
-          case 'unit5':
-            if (Math.random() > 0.5) {
-              correct = '24';
-              text = 'اليوم الكامل يحتوي على ........ ساعة.';
-            } else {
-              correct = '12';
-              text = 'القدم الواحد يحتوي على ........ بوصة.';
-            }
-            break;
-
-          case 'unit6':
-            if (Math.random() > 0.5) {
-              correct = '3';
-              text = 'المثلث له ........ أضلاع و 3 رؤوس.';
-            } else {
-              correct = '4';
-              text = 'المستطيل والمربع لكل منهما ........ زوايا قائمة.';
-            }
-            break;
-
-          default:
-            text = 'احسب ناتج الضرب: 5 × 1 = ........';
-            correct = '5';
-        }
-
-        return { text, correct };
-      };
-
-      const getUniqueTF = (pIdx: number, qSubIdx: number): { text: string; correct: string } => {
-        const pool = getScopedTFPool();
-        const unused = pool.filter(q => !usedTFTexts.has(q.text));
-        if (unused.length > 0) {
-          const picked = unused[Math.floor(Math.random() * unused.length)];
-          usedTFTexts.add(picked.text);
-          return { text: picked.text, correct: picked.correct };
-        }
-        const dyn = generateDynamicTF(getActiveUnitId());
-        usedTFTexts.add(dyn.text);
-        return dyn;
-      };
-
-      const getUniqueFill = (pIdx: number, qSubIdx: number): { text: string; correct: string } => {
-        const pool = getScopedFillPool();
-        const unused = pool.filter(q => !usedFillTexts.has(q.text));
-        if (unused.length > 0) {
-          const picked = unused[Math.floor(Math.random() * unused.length)];
-          usedFillTexts.add(picked.text);
-          return { text: picked.text, correct: picked.correct };
-        }
-        const dyn = generateDynamicFill(getActiveUnitId());
-        usedFillTexts.add(dyn.text);
-        return dyn;
-      };
-
-      const getScopedDiagrams = () => {
-        const activeUnit = getActiveUnitId();
-        if (scopeType === 'all') {
-          return extendedDiagrams;
-        }
-        const filtered = extendedDiagrams.filter(d => d.unitId === activeUnit);
-        if (filtered.length > 0) return filtered;
-        return extendedDiagrams;
-      };
-
-      const getScopedMatchingBlock = (pIdx: number) => {
-        const activeUnitId = getActiveUnitId();
-        if (scopeType === 'all') {
-          const unused = staticMatchingBlocks.filter(b => !usedMatchingIds.has(b.id));
-          if (unused.length > 0) {
-            const picked = unused[Math.floor(Math.random() * unused.length)];
-            usedMatchingIds.add(picked.id);
-            return picked;
-          }
-          return generateDynamicMatchBlock(activeUnitId, pIdx);
-        }
-
-        if (activeUnitId === 'unit1') {
-          const b = staticMatchingBlocks.find(x => x.id === 'match-multiples');
-          if (b) return b;
-        } else if (activeUnitId === 'unit4') {
-          const b = staticMatchingBlocks.find(x => x.id === 'match-fractions');
-          if (b) return b;
-        } else if (activeUnitId === 'unit5') {
-          const b = staticMatchingBlocks.find(x => x.id === 'match-units');
-          if (b) return b;
-        } else if (activeUnitId === 'unit6') {
-          const b = staticMatchingBlocks.find(x => x.id === 'match-shapes');
-          if (b) return b;
-        }
-
-        return generateDynamicMatchBlock(activeUnitId, pIdx);
-      };
-
-      const generateDynamicMatchBlock = (unitId: string, pIdx: number) => {
-        const left: string[] = [];
-        const right: string[] = [];
-        const correctArr = [0, 1, 2, 3];
-
-        if (unitId === 'unit3') {
-          const divisors = [7, 8, 9, 6];
-          const quotients = [6, 7, 8, 9];
-          for (let i = 0; i < 4; i++) {
-            const div = divisors[i];
-            const q = quotients[i];
-            left.push(`احسب ناتج: ${div * q} ÷ ${div}`);
-            right.push(`${q}`);
-          }
-          return {
-            id: `match-dyn-div-${pIdx}`,
-            title: 'توصيل عمليات القسمة بالنواتج الصحيحة',
-            left,
-            right,
-            correct: correctArr
-          };
-        } else {
-          const multipliers = [7, 8, 9, 6];
-          for (let i = 0; i < 4; i++) {
-            const mult = multipliers[i];
-            const rand = Math.floor(Math.random() * 8) + 2;
-            left.push(`احسب ناتج: ${mult} × ${rand}`);
-            right.push(`${mult * rand}`);
-          }
-          return {
-            id: `match-dyn-mult-${pIdx}`,
-            title: 'توصيل عمليات الضرب بالنواتج الحسابية الصحيحة',
-            left,
-            right,
-            correct: correctArr
-          };
-        }
-      };
-
+      const allowedUnits = getUnitsInScope();
       const newPages: GeneratedQuestion[][] = [];
+      const usedExercises = new Set<string>();
 
       // Generate content for each requested A4 page
       for (let p = 0; p < pagesCount; p++) {
         const pageQuestions: GeneratedQuestion[] = [];
+        
+        // Pick active unit for this page dynamically from allowed units to maintain scope
+        const pageUnit = allowedUnits[p % allowedUnits.length] || 'unit1';
 
-        // 1. Add True/False if selected
-        if (selectedTypes.includes('true_false')) {
-          const q1 = getUniqueTF(p, 1);
-          const q2 = getUniqueTF(p, 2);
+        // 1. Vertical Operations
+        if (selectedTypes.includes('vertical_ops')) {
+          const itemsAdd: { num1: string; num2: string; ans: string }[] = [];
+          const itemsSub: { num1: string; num2: string; ans: string }[] = [];
 
-          pageQuestions.push({
-            id: `q-tf-1-${p}`,
-            type: 'true_false',
-            text: `ضع علامة (صح) أو (خطأ) أمام العبارات التالية:\n1. ${q1.text}\n2. ${q2.text}`,
-            correctAnswer: `1. [ ${q1.correct} ] ، 2. [ ${q2.correct} ]`
-          });
-        }
+          if (pageUnit === 'unit4') {
+            // Fraction Vertical Add/Sub - Dynamic and Non-repeating
+            for (let i = 0; i < 2; i++) {
+              let d = 7, n1 = 1, n2 = 1, key = "", attempts = 0;
+              do {
+                d = Math.floor(Math.random() * 6) + 5; // 5 to 10
+                n2 = Math.floor(Math.random() * (d - 2)) + 1;
+                n1 = Math.floor(Math.random() * (d - n2 - 1)) + 1;
+                const sortedNums = [n1, n2].sort().join(',');
+                key = `vert_frac_add:${sortedNums}/${d}`;
+                attempts++;
+              } while (usedExercises.has(key) && attempts < 100);
 
-        // 2. Add Fill Blank if selected
-        if (selectedTypes.includes('fill_blank')) {
-          const q1 = getUniqueFill(p, 1);
-          const q2 = getUniqueFill(p, 2);
+              usedExercises.add(key);
+              itemsAdd.push({
+                num1: `${toArabicDigits(n1)}/${toArabicDigits(d)}`,
+                num2: `${toArabicDigits(n2)}/${toArabicDigits(d)}`,
+                ans: `${toArabicDigits(n1 + n2)}/${toArabicDigits(d)}`
+              });
+            }
 
-          pageQuestions.push({
-            id: `q-fb-1-${p}`,
-            type: 'fill_blank',
-            text: `أكمل الفراغات التالية بالإجابة الصحيحة المناسبة:\n1. ${q1.text}\n2. ${q2.text}`,
-            correctAnswer: `1. [ ${q1.correct} ] ، 2. [ ${q2.correct} ]`
-          });
-        }
+            for (let i = 0; i < 2; i++) {
+              let d = 7, n1 = 2, n2 = 1, key = "", attempts = 0;
+              do {
+                d = Math.floor(Math.random() * 6) + 5; // 5 to 10
+                n1 = Math.floor(Math.random() * (d - 2)) + 2; // at least 2
+                n2 = Math.floor(Math.random() * (n1 - 1)) + 1; // n2 < n1
+                key = `vert_frac_sub:${n1}-${n2}/${d}`;
+                attempts++;
+              } while (usedExercises.has(key) && attempts < 100);
 
-        // 3. Add Matching if selected
-        if (selectedTypes.includes('matching')) {
-          const matchItem = getScopedMatchingBlock(p);
-
-          pageQuestions.push({
-            id: `q-match-1-${p}`,
-            type: 'matching',
-            text: 'صل كل عنصر من العمود (أ) بما يناسبه تماماً من العمود (ب):',
-            leftItems: matchItem.left,
-            rightItems: [...matchItem.right].sort(() => 0.5 - Math.random()), // Shuffled right
-            correctAnswer: matchItem.left.map((item, idx) => `${item} ➔ ${matchItem.right[matchItem.correct[idx]]}`).join(' | ')
-          });
-        }
-
-        // 4. Add Diagram Labeling if selected
-        if (selectedTypes.includes('label_diagram')) {
-          const scopedDiagrams = getScopedDiagrams();
-          const unusedDiagrams = scopedDiagrams.filter(d => !usedDiagramIds.has(d.id));
-          let pickedDiagram;
-          if (unusedDiagrams.length > 0) {
-            pickedDiagram = unusedDiagrams[Math.floor(Math.random() * unusedDiagrams.length)];
-            usedDiagramIds.add(pickedDiagram.id);
+              usedExercises.add(key);
+              itemsSub.push({
+                num1: `${toArabicDigits(n1)}/${toArabicDigits(d)}`,
+                num2: `${toArabicDigits(n2)}/${toArabicDigits(d)}`,
+                ans: `${toArabicDigits(n1 - n2)}/${toArabicDigits(d)}`
+              });
+            }
           } else {
-            pickedDiagram = scopedDiagrams[p % scopedDiagrams.length];
+            // Standard Number Vertical Add/Sub - Dynamic and Non-repeating
+            let min = 10, max = 99; // easy
+            if (difficulty === 'medium') { min = 100; max = 999; }
+            if (difficulty === 'hard') { min = 1000; max = 9999; }
+
+            // Additions
+            for (let i = 0; i < 2; i++) {
+              let n1 = 0, n2 = 0, key = "", attempts = 0;
+              do {
+                n1 = Math.floor(Math.random() * (max - min)) + min;
+                n2 = Math.floor(Math.random() * (max - min)) + min;
+                const sortedNums = [n1, n2].sort().join(',');
+                key = `vert_add:${sortedNums}`;
+                attempts++;
+              } while (usedExercises.has(key) && attempts < 100);
+              
+              usedExercises.add(key);
+              itemsAdd.push({
+                num1: toArabicDigits(n1),
+                num2: toArabicDigits(n2),
+                ans: toArabicDigits(n1 + n2)
+              });
+            }
+
+            // Subtractions
+            for (let i = 0; i < 2; i++) {
+              let n1 = 0, n2 = 0, key = "", attempts = 0;
+              do {
+                n1 = Math.floor(Math.random() * (max - min)) + min;
+                n2 = Math.floor(Math.random() * (max - min)) + min;
+                if (n1 < n2) { const t = n1; n1 = n2; n2 = t; }
+                key = `vert_sub:${n1}-${n2}`;
+                attempts++;
+              } while (usedExercises.has(key) && attempts < 100);
+              
+              usedExercises.add(key);
+              itemsSub.push({
+                num1: toArabicDigits(n1),
+                num2: toArabicDigits(n2),
+                ans: toArabicDigits(n1 - n2)
+              });
+            }
           }
 
           pageQuestions.push({
-            id: `q-diag-1-${p}`,
-            type: 'label_diagram',
-            text: `تأمل الرسم التوضيحي أدناه، ثم اكتب المكون المناسب لكل رقم مشار إليه: (${pickedDiagram.title})`,
-            diagramImg: pickedDiagram.image,
-            labels: pickedDiagram.labels,
-            correctAnswer: pickedDiagram.labels.map(l => `${l.id}: ${l.name}`).join(' ، ')
+            id: `q-vert-${p}-${pageUnit}`,
+            type: 'vertical_ops',
+            text: pageUnit === 'unit4' 
+              ? 'أوجد ناتج العمليات الحسابية التالية للكسور رأسياً:' 
+              : 'أوجد ناتج العمليات الحسابية التالية رأسياً مع كتابة الحل بخط واضح:',
+            verticalAdd: itemsAdd,
+            verticalSub: itemsSub,
+            correctAnswer: `الجمع: ${itemsAdd.map(x => `${x.num1}+${x.num2}=${x.ans}`).join(' ، ')} | الطرح: ${itemsSub.map(x => `${x.num1}-${x.num2}=${x.ans}`).join(' ، ')}`
+          });
+        }
+
+        // 2. Compare & Sort
+        if (selectedTypes.includes('compare_sort')) {
+          const compItems: { num1: string; num2: string; correct: '<' | '>' | '=' }[] = [];
+          
+          if (pageUnit === 'unit4') {
+            // Compare Fractions - Dynamic and Non-repeating
+            for (let i = 0; i < 5; i++) {
+              let d = 5, n1 = 1, n2 = 1, key = "", attempts = 0;
+              do {
+                d = Math.floor(Math.random() * 6) + 5; // 5 to 10
+                n1 = Math.floor(Math.random() * d) + 1;
+                n2 = Math.floor(Math.random() * d) + 1;
+                key = `comp_frac:${n1}/${d}_vs_${n2}/${d}`;
+                attempts++;
+              } while (usedExercises.has(key) && attempts < 100);
+
+              usedExercises.add(key);
+              const sign = n1 > n2 ? '>' : n1 < n2 ? '<' : '=';
+              compItems.push({
+                num1: `${toArabicDigits(n1)}/${toArabicDigits(d)}`,
+                num2: `${toArabicDigits(n2)}/${toArabicDigits(d)}`,
+                correct: sign
+              });
+            }
+          } else if (pageUnit === 'unit5') {
+            // Compare Measurement Units - Dynamic and Non-repeating
+            const mTypes = ['inch_foot', 'foot_yard', 'day_hour', 'hour_minute'];
+            for (let i = 0; i < 5; i++) {
+              let attempts = 0;
+              let num1 = "", num2 = "", correct: '<' | '>' | '=' = '=';
+              let key = "";
+              do {
+                const chosenType = mTypes[(i + attempts) % mTypes.length];
+                if (chosenType === 'inch_foot') {
+                  const ft = Math.floor(Math.random() * 4) + 1; // 1 to 4 ft
+                  const inches = ft * 12 + (Math.random() > 0.5 ? 0 : (Math.random() > 0.5 ? 6 : -6));
+                  num1 = `${toArabicDigits(inches)} بوصة`;
+                  num2 = `${toArabicDigits(ft)} قدم`;
+                  correct = inches > (ft * 12) ? '>' : inches < (ft * 12) ? '<' : '=';
+                } else if (chosenType === 'foot_yard') {
+                  const yd = Math.floor(Math.random() * 3) + 1; // 1 to 3 yd
+                  const ft = yd * 3 + (Math.random() > 0.5 ? 0 : (Math.random() > 0.5 ? 2 : -1));
+                  num1 = `${toArabicDigits(yd)} ياردة`;
+                  num2 = `${toArabicDigits(ft)} أقدام`;
+                  correct = (yd * 3) > ft ? '>' : (yd * 3) < ft ? '<' : '=';
+                } else if (chosenType === 'day_hour') {
+                  const day = Math.floor(Math.random() * 2) + 1; // 1 to 2 days
+                  const hr = day * 24 + (Math.random() > 0.5 ? 0 : (Math.random() > 0.5 ? 6 : -12));
+                  num1 = `${toArabicDigits(hr)} ساعة`;
+                  num2 = `${toArabicDigits(day)} يوم`;
+                  correct = hr > (day * 24) ? '>' : hr < (day * 24) ? '<' : '=';
+                } else {
+                  // hour_minute
+                  const hr = Math.random() > 0.5 ? 1 : 2; 
+                  let mins = hr * 60;
+                  if (Math.random() > 0.5) mins += (Math.random() > 0.5 ? 15 : -15);
+                  num1 = `${toArabicDigits(mins)} دقيقة`;
+                  num2 = hr === 1 ? '١ ساعة' : '٢ ساعة';
+                  correct = mins > (hr * 60) ? '>' : mins < (hr * 60) ? '<' : '=';
+                }
+                key = `comp_meas:${num1}_vs_${num2}`;
+                attempts++;
+              } while (usedExercises.has(key) && attempts < 100);
+
+              usedExercises.add(key);
+              compItems.push({ num1, num2, correct });
+            }
+          } else {
+            // Standard Numbers Comparisons - Dynamic and Non-repeating
+            let min = 10, max = 99; // easy
+            if (difficulty === 'medium') { min = 100; max = 999; }
+            if (difficulty === 'hard') { min = 1000; max = 9999; }
+
+            for (let i = 0; i < 5; i++) {
+              let n1 = 0, n2 = 0, key = "", attempts = 0;
+              do {
+                n1 = Math.floor(Math.random() * (max - min)) + min;
+                n2 = Math.floor(Math.random() * (max - min)) + min;
+                key = `comp_std:${n1}_vs_${n2}`;
+                attempts++;
+              } while (usedExercises.has(key) && attempts < 100);
+
+              usedExercises.add(key);
+              const sign = n1 > n2 ? '>' : n1 < n2 ? '<' : '=';
+              compItems.push({
+                num1: toArabicDigits(n1),
+                num2: toArabicDigits(n2),
+                correct: sign
+              });
+            }
+          }
+
+          // Sort items raw and sorted
+          let rawSort: string[] = [];
+          let sortedSort: string[] = [];
+
+          if (pageUnit === 'unit4') {
+            // Fractions Sort - Dynamic and Non-repeating
+            let d = 7, raw: number[] = [], key = "", attempts = 0;
+            do {
+              d = Math.floor(Math.random() * 4) + 7; // 7, 8, 9, 10
+              const nums = new Set<number>();
+              while (nums.size < 5) {
+                nums.add(Math.floor(Math.random() * (d - 1)) + 1);
+              }
+              raw = Array.from(nums);
+              key = `sort_frac:${d}_[${[...raw].sort().join(',')}]`;
+              attempts++;
+            } while (usedExercises.has(key) && attempts < 100);
+
+            usedExercises.add(key);
+            rawSort = raw.map(x => `${toArabicDigits(x)}/${toArabicDigits(d)}`);
+            sortedSort = [...raw].sort((a, b) => a - b).map(x => `${toArabicDigits(x)}/${toArabicDigits(d)}`);
+          } else {
+            // Standard Numbers Sort - Dynamic and Non-repeating
+            let minVal = 10, maxVal = 99;
+            if (difficulty === 'medium') { minVal = 100; maxVal = 999; }
+            if (difficulty === 'hard') { minVal = 1000; maxVal = 9999; }
+
+            let rawNums: number[] = [], key = "", attempts = 0;
+            do {
+              const numbersSet = new Set<number>();
+              while (numbersSet.size < 5) {
+                numbersSet.add(Math.floor(Math.random() * (maxVal - minVal)) + minVal);
+              }
+              rawNums = Array.from(numbersSet);
+              key = `sort_std:[${[...rawNums].sort().join(',')}]`;
+              attempts++;
+            } while (usedExercises.has(key) && attempts < 100);
+
+            usedExercises.add(key);
+            rawSort = rawNums.map(x => toArabicDigits(x));
+            sortedSort = [...rawNums].sort((a, b) => a - b).map(x => toArabicDigits(x));
+          }
+
+          pageQuestions.push({
+            id: `q-comp-${p}-${pageUnit}`,
+            type: 'compare_sort',
+            text: 'المقارنة والترتيب التصاعدي للأعداد:',
+            compareItems: compItems,
+            sortItems: {
+              raw: rawSort,
+              sorted: sortedSort
+            },
+            correctAnswer: `المقارنة: ${compItems.map(x => `${x.num1} [${x.correct}] ${x.num2}`).join(' ، ')} | الترتيب: ${sortedSort.join(' ➔ ')}`
+          });
+        }
+
+        // 3. Abacus & Place value
+        if (selectedTypes.includes('abacus_pv')) {
+          const abNumList: { val: string; label: string; digits: string[] }[] = [];
+
+          if (pageUnit === 'unit4') {
+            // Fraction representation (not abacus, but visual circle slices!)
+            let val = 'fraction-3-4';
+            let label = 'الكسر الممثل هو: ........';
+            let digits = ['٣', '٤'];
+            
+            if (p % 2 !== 0) {
+              val = 'fraction-1-2';
+              digits = ['١', '٢'];
+            }
+            abNumList.push({ val, label, digits });
+          } else {
+            // Generate numbers for abacus - Dynamic and Non-repeating
+            let numVal = 0, key = "", attempts = 0;
+            do {
+              numVal = Math.floor(Math.random() * 899) + 100; // 3-digit
+              if (difficulty === 'medium') numVal = Math.floor(Math.random() * 8999) + 1000; // 4-digit
+              if (difficulty === 'hard') numVal = Math.floor(Math.random() * 89999) + 10000; // 5-digit
+              key = `abacus_num:${numVal}`;
+              attempts++;
+            } while (usedExercises.has(key) && attempts < 100);
+
+            usedExercises.add(key);
+            const arabicVal = toArabicDigits(numVal);
+            const digitsArray = String(numVal).split('').map(x => toArabicDigits(x));
+
+            abNumList.push({
+              val: arabicVal,
+              label: p % 2 === 0 ? 'اكتب الرقم الممثل على المعداد أعلاه:' : 'مثل العدد التالي برسم الخرزات المناسبة على المعداد:',
+              digits: digitsArray
+            });
+          }
+
+          // House values/formulas - Dynamic and Non-repeating Companion Fills
+          const fills: { text: string; correct: string }[] = [];
+          
+          if (pageUnit === 'unit1' || (pageUnit !== 'unit4' && pageUnit !== 'unit1' && Math.random() > 0.5)) {
+            // Generate standard place value fill
+            let attempts = 0;
+            let subKey = "";
+            let generatedFill: { text: string; correct: string } = { text: "", correct: "" };
+            do {
+              const numVal = Math.floor(Math.random() * 8999) + 1000; // 4-digit
+              const idx = Math.floor(Math.random() * 4); // index 0 to 3
+              const digitStr = String(numVal)[idx];
+              const placeNames = ['ألوف', 'مئات', 'عشرات', 'آحاد'];
+              const placeValue = placeNames[idx];
+              
+              generatedFill = {
+                text: `القيمة المنزلية للرقم ${toArabicDigits(digitStr)} في العدد ${toArabicDigits(numVal)} هي: ........`,
+                correct: placeValue
+              };
+              subKey = `pv_fill:${digitStr}_in_${numVal}`;
+              attempts++;
+            } while (usedExercises.has(subKey) && attempts < 100);
+            
+            usedExercises.add(subKey);
+            fills.push(generatedFill);
+
+            // Standard written form
+            attempts = 0;
+            do {
+              const writtenPool = [
+                { text: 'خمسة آلاف وأربعمائة واثنان', correct: '٥٤٠٢' },
+                { text: 'سبعة آلاف ومائتان وثلاثون', correct: '٧٢٣٠' },
+                { text: 'ألف وثمانمائة وخمسة عشر', correct: '١٨١٥' },
+                { text: 'تسعة آلاف وستة', correct: '٩٠٠٦' },
+                { text: 'أربعة آلاف وخمسون', correct: '٤٠٥٠' },
+                { text: 'ثمانية آلاف ومائة وواحد', correct: '٨١٠١' },
+                { text: 'ثلاثة آلاف وسبعمائة وأربعة وثمانون', correct: '٣٧٨٤' },
+                { text: 'ستة آلاف وتسعمائة واثنا عشر', correct: '٦٩١٢' }
+              ];
+              const chosen = writtenPool[Math.floor(Math.random() * writtenPool.length)];
+              generatedFill = {
+                text: `الصيغة القياسية للعدد (${chosen.text}) هي: ........`,
+                correct: chosen.correct
+              };
+              subKey = `written_fill:${chosen.correct}`;
+              attempts++;
+            } while (usedExercises.has(subKey) && attempts < 100);
+
+            usedExercises.add(subKey);
+            fills.push(generatedFill);
+          } else if (pageUnit === 'unit4') {
+            // Fraction fill
+            let subKey = "";
+            let generatedFill: { text: string; correct: string } = { text: "", correct: "" };
+            let numVal1 = 3, numVal2 = 4;
+            let attempts = 0;
+            do {
+              numVal2 = Math.floor(Math.random() * 6) + 4; // 4 to 9
+              numVal1 = Math.floor(Math.random() * (numVal2 - 1)) + 1;
+              const typeChoice = Math.random() > 0.5 ? 'numerator' : 'denominator';
+              if (typeChoice === 'numerator') {
+                generatedFill = {
+                  text: `في الكسر الاعتيادي ${toArabicDigits(numVal1)}/${toArabicDigits(numVal2)}، يسمى الرقم ${toArabicDigits(numVal1)} بـ ........`,
+                  correct: 'البسط'
+                };
+              } else {
+                generatedFill = {
+                  text: `في الكسر الاعتيادي ${toArabicDigits(numVal1)}/${toArabicDigits(numVal2)}، يسمى الرقم ${toArabicDigits(numVal2)} بـ ........`,
+                  correct: 'المقام'
+                };
+              }
+              subKey = `frac_fill:${numVal1}/${numVal2}_${typeChoice}`;
+              attempts++;
+            } while (usedExercises.has(subKey) && attempts < 100);
+
+            usedExercises.add(subKey);
+            fills.push(generatedFill);
+
+            // Second fraction fill
+            attempts = 0;
+            do {
+              const terms = [
+                { num: 1, den: 2, name: 'نصف' },
+                { num: 1, den: 4, name: 'ربع' },
+                { num: 1, den: 3, name: 'ثلث' },
+                { num: 1, den: 5, name: 'خمس' },
+                { num: 3, den: 4, name: 'ثلاثة أرباع' }
+              ];
+              const chosen = terms[Math.floor(Math.random() * terms.length)];
+              generatedFill = {
+                text: `الكسر الذي بسطه ${toArabicDigits(chosen.num)} ومقامه ${toArabicDigits(chosen.den)} يسمى ........`,
+                correct: chosen.name
+              };
+              subKey = `frac_name_fill:${chosen.num}/${chosen.den}`;
+              attempts++;
+            } while (usedExercises.has(subKey) && attempts < 100);
+
+            usedExercises.add(subKey);
+            fills.push(generatedFill);
+          } else {
+            // General or other units fills
+            let subKey = "";
+            let generatedFill: { text: string; correct: string } = { text: "", correct: "" };
+            let attempts = 0;
+            do {
+              const stdPool = [
+                { text: 'العدد الزوجي الذي يسبق العدد ١٠ مباشرة هو: ........', correct: '٨', key: 'prev_10' },
+                { text: 'العدد الفردي الذي يلي العدد ٩ مباشرة هو: ........', correct: '١١', key: 'next_9' },
+                { text: 'العدد الزوجي الذي يلي العدد ١٢ مباشرة هو: ........', correct: '١٤', key: 'next_12' },
+                { text: 'أصغر عدد مكون من ثلاثة أرقام مختلفة هو: ........', correct: '١٠٢', key: 'smallest_3' },
+                { text: 'أكبر عدد مكون من ثلاثة أرقام هو: ........', correct: '٩٩٩', key: 'largest_3' }
+              ];
+              const chosen = stdPool[Math.floor(Math.random() * stdPool.length)];
+              generatedFill = { text: chosen.text, correct: chosen.correct };
+              subKey = `std_misc_fill:${chosen.key}`;
+              attempts++;
+            } while (usedExercises.has(subKey) && attempts < 100);
+
+            usedExercises.add(subKey);
+            fills.push(generatedFill);
+
+            // Second one
+            attempts = 0;
+            do {
+              const stdPool2 = [
+                { text: 'القيمة المنزلية للرقم ٧ في العدد ٧٥٢ هي: ........', correct: 'مئات', key: '7_in_752' },
+                { text: 'العدد الزوجي الذي يسبق العدد ٢٠ مباشرة هو: ........', correct: '١٨', key: 'prev_20' },
+                { text: 'العدد الفردي الذي يلي العدد ١٥ مباشرة هو: ........', correct: '١٧', key: 'next_15' }
+              ];
+              const chosen = stdPool2[Math.floor(Math.random() * stdPool2.length)];
+              generatedFill = { text: chosen.text, correct: chosen.correct };
+              subKey = `std_misc_fill2:${chosen.key}`;
+              attempts++;
+            } while (usedExercises.has(subKey) && attempts < 100);
+
+            usedExercises.add(subKey);
+            fills.push(generatedFill);
+          }
+
+          pageQuestions.push({
+            id: `q-abacus-${p}-${pageUnit}`,
+            type: 'abacus_pv',
+            text: pageUnit === 'unit4' ? 'أجب عن الأسئلة الهندسية والكسور المظللة التالية:' : 'التمثيل على المعداد الحسابي وتحديد المنازل والقيم المنزلية:',
+            abacusNum: abNumList,
+            fills: fills,
+            correctAnswer: `المعداد: ${abNumList.map(x => x.val).join(' ، ')} | الفراغات: ${fills.map(x => `${x.text} ➔ [${x.correct}]`).join(' | ')}`
+          });
+        }
+
+        // 4. Multiplication & Division Grids
+        if (selectedTypes.includes('mult_div_grids')) {
+          const multItems: { text: string; correct: string }[] = [];
+          const sideMatchList: { val1: string; equation: string; correct: string }[] = [];
+
+          // Generate empty multiplier boxes - Dynamic and Non-repeating
+          let multTable = 3;
+          let tableAttempts = 0;
+          do {
+            if (difficulty === 'easy') multTable = Math.floor(Math.random() * 3) + 2; // 2, 3, 4
+            else if (difficulty === 'medium') multTable = Math.floor(Math.random() * 3) + 5; // 5, 6, 7
+            else multTable = Math.floor(Math.random() * 3) + 8; // 8, 9, 10
+            tableAttempts++;
+          } while (usedExercises.has(`mult_table:${multTable}`) && tableAttempts < 50);
+          usedExercises.add(`mult_table:${multTable}`);
+
+          for (let i = 0; i < 4; i++) {
+            let randFactor = 1;
+            let styleNum = 0;
+            let subKey = "";
+            let attempts = 0;
+            do {
+              randFactor = Math.floor(Math.random() * 9) + 1;
+              styleNum = Math.floor(Math.random() * 3); // 0, 1, 2
+              subKey = `mult_box:${multTable}x${randFactor}_s${styleNum}`;
+              attempts++;
+            } while (usedExercises.has(subKey) && attempts < 100);
+
+            usedExercises.add(subKey);
+
+            if (styleNum === 0) {
+              multItems.push({
+                text: `[   ] = ${toArabicDigits(multTable)} × ${toArabicDigits(randFactor)}`,
+                correct: toArabicDigits(multTable * randFactor)
+              });
+            } else if (styleNum === 1) {
+              multItems.push({
+                text: `${toArabicDigits(multTable * randFactor)} = ${toArabicDigits(multTable)} × [   ]`,
+                correct: toArabicDigits(randFactor)
+              });
+            } else {
+              multItems.push({
+                text: `${toArabicDigits(multTable)} × [   ] = ${toArabicDigits(multTable * randFactor)}`,
+                correct: toArabicDigits(randFactor)
+              });
+            }
+          }
+
+          // Division Grid Generator - Dynamic and Non-repeating
+          let divTable = 7;
+          let divAttempts = 0;
+          do {
+            if (difficulty === 'easy') divTable = Math.random() > 0.5 ? 2 : 3;
+            else if (difficulty === 'medium') divTable = Math.random() > 0.5 ? 4 : 5;
+            else divTable = Math.random() > 0.5 ? 8 : 9;
+            divAttempts++;
+          } while (usedExercises.has(`div_table:${divTable}`) && divAttempts < 50);
+          usedExercises.add(`div_table:${divTable}`);
+
+          // Pick 6 random non-repeating quotients to make it unique and dynamic
+          const possibleQuotients = new Set<number>();
+          while (possibleQuotients.size < 6) {
+            possibleQuotients.add(Math.floor(Math.random() * 9) + 1); // quotients 1 to 9
+          }
+          const quotientsRaw = Array.from(possibleQuotients);
+          const dividendsRaw = quotientsRaw.map(x => x * divTable);
+
+          const divGridData = {
+            divisor: `÷ ${toArabicDigits(divTable)}`,
+            dividends: dividendsRaw.map(x => toArabicDigits(x)),
+            quotients: quotientsRaw.map(x => toArabicDigits(x))
+          };
+
+          // Side Choices Box - Dynamic and Non-repeating
+          for (let i = 0; i < 3; i++) {
+            let t = 2, f = 2, ans = 4;
+            let subKey = "";
+            let attempts = 0;
+            do {
+              t = Math.floor(Math.random() * 8) + 2; // 2 to 9
+              f = Math.floor(Math.random() * 8) + 2; // 2 to 9
+              ans = t * f;
+              subKey = `side_match:${t}x${f}`;
+              attempts++;
+            } while (usedExercises.has(subKey) && attempts < 100);
+
+            usedExercises.add(subKey);
+
+            // Create choices string: ans, and two distractors
+            const d1 = ans + (Math.random() > 0.5 ? 9 : -9) || 12;
+            const d2 = ans + (Math.random() > 0.5 ? 5 : -5) || 15;
+            const choices = [ans, d1, d2].map(x => toArabicDigits(Math.abs(x))).sort().join(' / ');
+
+            sideMatchList.push({
+              val1: choices,
+              equation: `[   ] = ${toArabicDigits(t)} × ${toArabicDigits(f)}`,
+              correct: toArabicDigits(ans)
+            });
+          }
+
+          pageQuestions.push({
+            id: `q-multdiv-${p}-${pageUnit}`,
+            type: 'mult_div_grids',
+            text: 'جد ناتج ما يلي مستعيناً بمربعات الضرب وجدول القسمة الدوري:',
+            multBoxes: multItems,
+            divGrid: divGridData,
+            sideMatch: sideMatchList,
+            correctAnswer: `الضرب: ${multItems.map(x => `${x.text} [${x.correct}]`).join(' ، ')} | القسمة: المقسوم عليه (${divGridData.divisor})، خارج القسمة (${divGridData.quotients.join(' ، ')}) | الصندوق الجانبي: ${sideMatchList.map(x => `${x.equation} ➔ ${x.correct}`).join(' ، ')}`
+          });
+        }
+
+        // 5. MCQ & Fill Blank
+        if (selectedTypes.includes('mcq_fill_blank')) {
+          const mcqList: { text: string; options: string[]; correct: string }[] = [];
+          const fillList: { text: string; correct: string }[] = [];
+
+          if (pageUnit === 'unit4') {
+            // Pool of fraction MCQs - Dynamic and Non-repeating Selection
+            const poolMCQ = [
+              { text: 'الكسر الذي يمثل ربع هو:', options: ['١/٤', '١/٢', '٣/٤'], correct: 'أ' },
+              { text: 'الرقم الذي يمثل المقام في الكسر ٣/٥ هو:', options: ['٣', '٥', '٨'], correct: 'ب' },
+              { text: 'الكسران متساويا المقام هما:', options: ['١/٤ و ١/٥', '٢/٧ و ٥/٧', '١/٢ و ٢/٣'], correct: 'ب' },
+              { text: 'الكسر الذي يمثل نصف هو:', options: ['١/٣', '٢/٤', '٣/٤'], correct: 'ب' },
+              { text: 'الرقم الذي يمثل البسط في الكسر ٤/٩ هو:', options: ['٤', '٩', '١٣'], correct: 'أ' }
+            ];
+            
+            let selectedCount = 0;
+            let attempts = 0;
+            while (selectedCount < 3 && attempts < 100) {
+              const item = poolMCQ[Math.floor(Math.random() * poolMCQ.length)];
+              const key = `mcq_unit4:${item.text}`;
+              if (!usedExercises.has(key)) {
+                usedExercises.add(key);
+                mcqList.push(item);
+                selectedCount++;
+              }
+              attempts++;
+            }
+            if (mcqList.length < 3) {
+              poolMCQ.forEach(item => {
+                if (mcqList.length < 3 && !mcqList.some(x => x.text === item.text)) mcqList.push(item);
+              });
+            }
+
+            // Pool of fraction Fills - Dynamic and Non-repeating Selection
+            const poolFills = [
+              { text: 'في الكسر الاعتيادي ٣/٤ يسمى الرقم ٣ بـ ............', correct: 'البسط' },
+              { text: 'الكسر الاعتيادي الذي بسطه ٢ ومقامه ٧ يكتب: ............', correct: '٢/٧' },
+              { text: 'الكسر الذي يعبر عن الجزء الواحد من خمسة أجزاء متساوية هو: ............', correct: '١/٥' },
+              { text: 'في الكسر الاعتيادي ٥/٨ يسمى الرقم ٨ بـ ............', correct: 'المقام' },
+              { text: 'الكسر الذي بسطه ٣ ومقامه ١٠ يكتب: ............', correct: '٣/١٠' }
+            ];
+
+            let fillCount = 0;
+            attempts = 0;
+            while (fillCount < 3 && attempts < 100) {
+              const item = poolFills[Math.floor(Math.random() * poolFills.length)];
+              const key = `fill_unit4:${item.text}`;
+              if (!usedExercises.has(key)) {
+                usedExercises.add(key);
+                fillList.push(item);
+                fillCount++;
+              }
+              attempts++;
+            }
+            if (fillList.length < 3) {
+              poolFills.forEach(item => {
+                if (fillList.length < 3 && !fillList.some(x => x.text === item.text)) fillList.push(item);
+              });
+            }
+
+          } else if (pageUnit === 'unit5') {
+            // Pool of measurement / time MCQs - Dynamic and Non-repeating Selection
+            const poolMCQ = [
+              { text: 'اليوم الكامل يحتوي على:', options: ['١٢ ساعة', '٢٤ ساعة', '٣٠ ساعة'], correct: 'ب' },
+              { text: 'القدم الواحد يساوي بالبوصة:', options: ['٦ بوصات', '١٠ بوصات', '١٢ بوصة'], correct: 'ج' },
+              { text: 'ربع الساعة يساوي كم دقيقة؟', options: ['١٥ دقيقة', '٣٠ دقيقة', '٤٥ دقيقة'], correct: 'أ' },
+              { text: 'الياردة الواحدة تساوي بالأقدام:', options: ['٢ قدم', '٣ أقدام', '٤ أقدام'], correct: 'ب' },
+              { text: 'نصف اليوم يساوي كم ساعة؟', options: ['٦ ساعات', '١٢ ساعة', '١٨ ساعة'], correct: 'ب' }
+            ];
+
+            let selectedCount = 0;
+            let attempts = 0;
+            while (selectedCount < 3 && attempts < 100) {
+              const item = poolMCQ[Math.floor(Math.random() * poolMCQ.length)];
+              const key = `mcq_unit5:${item.text}`;
+              if (!usedExercises.has(key)) {
+                usedExercises.add(key);
+                mcqList.push(item);
+                selectedCount++;
+              }
+              attempts++;
+            }
+            if (mcqList.length < 3) {
+              poolMCQ.forEach(item => {
+                if (mcqList.length < 3 && !mcqList.some(x => x.text === item.text)) mcqList.push(item);
+              });
+            }
+
+            // Pool of measurement / time Fills - Dynamic and Non-repeating Selection
+            const poolFills = [
+              { text: 'نصف الساعة يحتوي على ............ دقيقة.', correct: '٣٠' },
+              { text: 'الياردة الواحدة تحتوي على ............ أقدام.', correct: '٣' },
+              { text: 'عقرب الساعات في الساعة هو العقرب ............', correct: 'القصير' },
+              { text: 'اليوم الكامل يحتوي على ............ ساعة.', correct: '٢٤' },
+              { text: 'القدم الواحد يحتوي على ............ بوصة.', correct: '١٢' },
+              { text: 'عقرب الدقائق في الساعة هو العقرب ............', correct: 'الطويل' }
+            ];
+
+            let fillCount = 0;
+            attempts = 0;
+            while (fillCount < 3 && attempts < 100) {
+              const item = poolFills[Math.floor(Math.random() * poolFills.length)];
+              const key = `fill_unit5:${item.text}`;
+              if (!usedExercises.has(key)) {
+                usedExercises.add(key);
+                fillList.push(item);
+                fillCount++;
+              }
+              attempts++;
+            }
+            if (fillList.length < 3) {
+              poolFills.forEach(item => {
+                if (fillList.length < 3 && !fillList.some(x => x.text === item.text)) fillList.push(item);
+              });
+            }
+
+          } else {
+            // General MCQs - Dynamic and Non-repeating Selection
+            const poolMCQ = [
+              { text: 'العدد اثنا عشر ألفاً وثلاثمائة يكتب بالأرقام:', options: ['١٢٥٠٠', '١٢٣٠٠', '١٠٥٠٠'], correct: 'ب' },
+              { text: 'ميز العدد الفردي بين الأعداد التالية:', options: ['١٠٨', '١١٠', '١٠١'], correct: 'ج' },
+              { text: 'العدد ١٨ يقبل القسمة على:', options: ['٥', '٢', '١٠'], correct: 'ب' },
+              { text: 'ميز العدد الزوجي بين الأعداد التالية:', options: ['١٤٣', '٢٥٦', '٧٨٩'], correct: 'ب' },
+              { text: 'العدد الذي يقبل القسمة على ٥ و ١٠ معاً هو الذي رقم آحاده:', options: ['٥', '٠', '٢'], correct: 'ب' }
+            ];
+
+            let selectedCount = 0;
+            let attempts = 0;
+            while (selectedCount < 3 && attempts < 100) {
+              const item = poolMCQ[Math.floor(Math.random() * poolMCQ.length)];
+              const key = `mcq_general:${item.text}`;
+              if (!usedExercises.has(key)) {
+                usedExercises.add(key);
+                mcqList.push(item);
+                selectedCount++;
+              }
+              attempts++;
+            }
+            if (mcqList.length < 3) {
+              poolMCQ.forEach(item => {
+                if (mcqList.length < 3 && !mcqList.some(x => x.text === item.text)) mcqList.push(item);
+              });
+            }
+
+            // General Fills - Dynamic and Non-repeating Selection
+            const poolFills = [
+              { text: 'عدد زوجي + عدد زوجي = ............', correct: 'عدد زوجي' },
+              { text: 'إذا كان رقم الآحاد صفراً فإن العدد يقبل القسمة على ............', correct: '٥ أو ١٠' },
+              { text: 'يقبل العدد القسمة على ٢ إذا كان رقم آحاده عدداً ............', correct: 'زوجياً' },
+              { text: 'عدد فردي + عدد فردي = ............', correct: 'عدد زوجي' },
+              { text: 'العدد الزوجي الذي يسبق العدد ٢ مباشرة هو ............', correct: 'صفر' }
+            ];
+
+            let fillCount = 0;
+            attempts = 0;
+            while (fillCount < 3 && attempts < 100) {
+              const item = poolFills[Math.floor(Math.random() * poolFills.length)];
+              const key = `fill_general:${item.text}`;
+              if (!usedExercises.has(key)) {
+                usedExercises.add(key);
+                fillList.push(item);
+                fillCount++;
+              }
+              attempts++;
+            }
+            if (fillList.length < 3) {
+              poolFills.forEach(item => {
+                if (fillList.length < 3 && !fillList.some(x => x.text === item.text)) fillList.push(item);
+              });
+            }
+          }
+
+          pageQuestions.push({
+            id: `q-mcqfill-${p}-${pageUnit}`,
+            type: 'mcq_fill_blank',
+            text: 'أكمل العبارات التالية واختر الإجابة الصحيحة مما يلي:',
+            mcqs: mcqList,
+            fills: fillList,
+            correctAnswer: `الخيارات: ${mcqList.map((x, i) => `${i+1}. [${x.correct}]`).join(' ، ')} | الفراغات: ${fillList.map((x, i) => `${i+1}. [${x.correct}]`).join(' ، ')}`
           });
         }
 
@@ -932,7 +1120,7 @@ export default function WorksheetGenerator({
       </div>
 
       {/* Preview Area: Right (or Left) side showing A4 sheets */}
-      <div className="flex-1 flex flex-col gap-4">
+      <div className="sudan-print-pages-wrapper flex-1 flex flex-col gap-4">
         {/* Actions above the A4 pages */}
         <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
           <div className="text-right">
@@ -951,15 +1139,15 @@ export default function WorksheetGenerator({
         {/* Simulated A4 pages container */}
         <div
           ref={printAreaRef}
-          className="flex-1 space-y-8 overflow-y-auto max-h-[600px] p-4 bg-gray-100 rounded-3xl border border-gray-200/50 shadow-inner print:p-0 print:m-0 print:overflow-visible print:bg-white print:max-h-none"
+          className="sudan-print-pages-container flex-1 space-y-8 overflow-y-auto max-h-[600px] p-4 bg-gray-100 rounded-3xl border border-gray-200/50 shadow-inner print:p-0 print:m-0 print:overflow-visible print:bg-white print:max-h-none"
         >
           {generatedPages.map((page, pIdx) => (
-            <div
-              key={pIdx}
-              className="relative w-full max-w-[800px] min-h-[1130px] mx-auto bg-white p-12 shadow-xl border-t-[8px] border-green-500 font-sans text-right flex flex-col justify-between page-break-after printable-page-a4"
-              dir="rtl"
-              style={{ aspectRatio: '1/1.4142' }} // exact A4 aspect ratio
-            >
+            <Fragment key={pIdx}>
+              <div
+                className="relative w-full max-w-[800px] min-h-[1130px] mx-auto bg-white p-12 shadow-xl border-t-[8px] border-green-500 font-sans text-right flex flex-col justify-between page-break-after printable-page-a4"
+                dir="rtl"
+                style={{ aspectRatio: '1/1.4142' }} // exact A4 aspect ratio
+              >
               {/* WATERMARK ELEMENT */}
               {!isWatermarkRemoved && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden z-0 opacity-[0.04] watermark-container">
@@ -994,116 +1182,251 @@ export default function WorksheetGenerator({
                 {page.map((q, qIdx) => (
                   <div key={q.id} className="space-y-3 pb-6 border-b border-dashed border-gray-100">
                     <h3 className="font-black text-base text-gray-800">
-                      السؤال ({qIdx + 1}): <span className="font-sans font-bold">{q.text}</span>
+                      السؤال ({qIdx + 1}): <span className="font-sans font-bold text-blue-950">{q.text}</span>
                     </h3>
 
-                    {/* True/False Lines */}
-                    {q.type === 'true_false' && (
-                      <div className="space-y-4 pr-4">
-                        <div className="flex justify-between items-center text-sm font-bold text-gray-400">
-                          <span>العبارة الأولى</span>
-                          <span className="border-2 border-gray-200 rounded-lg px-4 py-1 font-mono text-xs">[    ]</span>
+                    {/* 1. Vertical Operations Rendering */}
+                    {q.type === 'vertical_ops' && (
+                      <div className="grid grid-cols-2 gap-8 pr-4">
+                        {/* Addition Column */}
+                        <div className="space-y-4">
+                          <p className="text-xs text-gray-500 font-bold border-r-2 border-green-500 pr-2">أولاً: أوجد ناتج الجمع رأسياً:</p>
+                          <div className="flex justify-around gap-4">
+                            {q.verticalAdd?.map((item, idx) => (
+                              <div key={idx} className="flex flex-col items-end font-mono font-bold text-lg border-2 border-gray-100 p-4 rounded-xl w-24 bg-gray-50/50 shadow-sm">
+                                <span className="tracking-widest">{item.num1}</span>
+                                <span className="tracking-widest border-b-2 border-gray-400 pb-1 w-full text-right flex justify-between">
+                                  <span>+</span>
+                                  <span>{item.num2}</span>
+                                </span>
+                                <span className="h-6 text-green-600 pt-1 font-sans text-sm font-black">
+                                  {showAnswers ? item.ans : '..........'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <div className="flex justify-between items-center text-sm font-bold text-gray-400">
-                          <span>العبارة الثانية</span>
-                          <span className="border-2 border-gray-200 rounded-lg px-4 py-1 font-mono text-xs">[    ]</span>
+                        {/* Subtraction Column */}
+                        <div className="space-y-4">
+                          <p className="text-xs text-gray-500 font-bold border-r-2 border-red-500 pr-2">ثانياً: أوجد ناتج الطرح رأسياً:</p>
+                          <div className="flex justify-around gap-4">
+                            {q.verticalSub?.map((item, idx) => (
+                              <div key={idx} className="flex flex-col items-end font-mono font-bold text-lg border-2 border-gray-100 p-4 rounded-xl w-24 bg-gray-50/50 shadow-sm">
+                                <span className="tracking-widest">{item.num1}</span>
+                                <span className="tracking-widest border-b-2 border-gray-400 pb-1 w-full text-right flex justify-between">
+                                  <span>-</span>
+                                  <span>{item.num2}</span>
+                                </span>
+                                <span className="h-6 text-green-600 pt-1 font-sans text-sm font-black">
+                                  {showAnswers ? item.ans : '..........'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     )}
 
-                    {/* Fill Blank Lines */}
-                    {q.type === 'fill_blank' && (
-                      <div className="h-6"></div> // Blank space is already represented by points in question text
-                    )}
-
-                    {/* Matching Questions Representation */}
-                    {q.type === 'matching' && q.leftItems && q.rightItems && (
-                      <div className="grid grid-cols-2 gap-12 pt-2 pr-4 text-sm font-bold">
-                        <div className="space-y-3">
-                          <p className="text-xs text-gray-400 font-black">العمود (أ)</p>
-                          {q.leftItems.map((item, idx) => (
-                            <div key={idx} className="flex justify-between items-center p-2.5 bg-gray-50 border border-gray-200 rounded-xl">
-                              <span>{item}</span>
-                              <span className="w-3.5 h-3.5 bg-green-500 rounded-full inline-block"></span>
+                    {/* 2. Compare & Sort Rendering */}
+                    {q.type === 'compare_sort' && (
+                      <div className="space-y-6 pr-4">
+                        <div className="grid grid-cols-2 gap-x-12 gap-y-3">
+                          {q.compareItems?.map((item, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-sm font-bold p-1">
+                              <span className="font-mono text-base">{item.num1}</span>
+                              <span className="w-12 h-8 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center font-black text-blue-600 text-lg bg-white">
+                                {showAnswers ? item.correct : ''}
+                              </span>
+                              <span className="font-mono text-base">{item.num2}</span>
                             </div>
                           ))}
                         </div>
-                        <div className="space-y-3">
-                          <p className="text-xs text-gray-400 font-black">العمود (ب)</p>
-                          {q.rightItems.map((item, idx) => (
-                            <div key={idx} className="flex justify-between items-center p-2.5 bg-gray-50 border border-gray-200 rounded-xl">
-                              <span className="w-3.5 h-3.5 bg-green-500 rounded-full inline-block"></span>
-                              <span>{item}</span>
+                        {q.sortItems && (
+                          <div className="p-3 bg-blue-50/30 border border-blue-100 rounded-xl space-y-2">
+                            <p className="text-xs text-blue-800 font-black">رتّب الأعداد التالية ترتيباً تصاعدياً (من الأصغر للأكبر):</p>
+                            <div className="flex justify-center gap-3 py-1">
+                              {q.sortItems.raw.map((n, idx) => (
+                                <span key={idx} className="px-2.5 py-1 bg-white border border-gray-200 rounded-lg font-mono font-bold text-sm shadow-sm">{n}</span>
+                              ))}
                             </div>
-                          ))}
-                        </div>
+                            <p className="text-xs text-gray-500 font-bold pt-1">
+                              الترتيب الصحيح: <span className="font-mono text-blue-700 font-black">{showAnswers ? q.sortItems.sorted.join(' ➔ ') : '........ ➔ ........ ➔ ........ ➔ ........ ➔ ........'}</span>
+                            </p>
+                          </div>
+                        )}
                       </div>
                     )}
 
-                    {/* Label Diagram Representation */}
-                    {q.type === 'label_diagram' && q.labels && (
-                      <div className="flex flex-col items-center gap-4 pt-2">
-                        {/* Interactive or printable drawing */}
-                        <div className="relative w-64 h-36 border border-gray-200 bg-gray-50 rounded-2xl flex items-center justify-center overflow-hidden">
-                          {q.diagramImg === 'abacus' ? (
-                            <div className="flex gap-4">
-                              <span className="w-1.5 h-20 bg-amber-800 rounded-full block relative">
-                                <span className="absolute top-4 -left-1.5 w-4 h-4 bg-orange-500 rounded-full"></span>
-                                <span className="absolute bottom-4 -left-1.5 w-4 h-4 bg-blue-500 rounded-full"></span>
-                              </span>
-                              <span className="w-1.5 h-20 bg-amber-800 rounded-full block relative">
-                                <span className="absolute top-8 -left-1.5 w-4 h-4 bg-orange-500 rounded-full"></span>
-                              </span>
-                              <span className="w-1.5 h-20 bg-amber-800 rounded-full block relative"></span>
-                            </div>
-                          ) : q.diagramImg === 'fraction' ? (
-                            <div className="flex flex-col items-center justify-center font-bold text-2xl text-purple-700">
-                              <span>٣</span>
-                              <span className="w-12 h-0.5 bg-purple-400 my-1"></span>
-                              <span>٥</span>
-                            </div>
-                          ) : q.diagramImg === 'geometry' ? (
-                            <div className="flex gap-4 items-center justify-center w-full px-2">
-                              <div className="w-16 h-10 border-2 border-blue-500 bg-blue-50/50 rounded-lg flex items-center justify-center text-[10px] font-black text-blue-700">مستطيل</div>
-                              <div className="w-12 h-12 border-2 border-orange-500 bg-orange-50/50 rounded-lg flex items-center justify-center text-[10px] font-black text-orange-700">مربع</div>
-                              <div className="w-0 h-0 border-l-[20px] border-l-transparent border-r-[20px] border-r-transparent border-b-[40px] border-b-green-500 relative flex items-center justify-center">
-                                <span className="absolute top-4 text-[9px] text-white font-black whitespace-nowrap">مثلث</span>
+                    {/* 3. Abacus & Place Value Rendering */}
+                    {q.type === 'abacus_pv' && (
+                      <div className="space-y-6 pr-4">
+                        {q.abacusNum?.map((item, idx) => {
+                          const isFraction = item.val.includes('fraction');
+                          return (
+                            <div key={idx} className="flex flex-col md:flex-row items-center gap-6 p-4 bg-gray-50/50 rounded-2xl border border-gray-100">
+                              {isFraction ? (
+                                /* Fraction Circle Slices */
+                                <div className="relative w-28 h-28 flex items-center justify-center">
+                                  <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
+                                    <circle cx="50" cy="50" r="40" fill="none" stroke="#e2e8f0" strokeWidth="20" />
+                                    {item.val === 'fraction-3-4' ? (
+                                      <>
+                                        <circle cx="50" cy="50" r="40" fill="none" stroke="#f59e0b" strokeWidth="20" strokeDasharray="188.4 251.2" />
+                                        <path d="M 50 10 L 50 90 M 10 50 L 90 50" stroke="#ffffff" strokeWidth="1.5" />
+                                      </>
+                                    ) : (
+                                      <>
+                                        <circle cx="50" cy="50" r="40" fill="none" stroke="#3b82f6" strokeWidth="20" strokeDasharray="125.6 251.2" strokeDashoffset="0" />
+                                        <path d="M 50 10 L 50 90" stroke="#ffffff" strokeWidth="1.5" />
+                                      </>
+                                    )}
+                                  </svg>
+                                </div>
+                              ) : (
+                                /* Abacus Wire Poles & Beads */
+                                <div className="flex flex-col items-center bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
+                                  <div className="flex gap-4 items-end h-24 pb-1 px-4 relative">
+                                    {/* Horizontal Wire bar */}
+                                    <div className="absolute bottom-1 left-2 right-2 h-1 bg-amber-800 rounded"></div>
+                                    
+                                    {/* Wire Rods with customized colors */}
+                                    {item.digits.map((digit, dIdx) => {
+                                      const mapping: Record<string, number> = { '٠':0, '١':1, '٢':2, '٣':3, '٤':4, '٥':5, '٦':6, '٧':7, '٨':8, '٩':9 };
+                                      const count = mapping[digit] || 0;
+                                      const name = dIdx === 0 ? 'ألوف' : dIdx === 1 ? 'مئات' : dIdx === 2 ? 'عشرات' : 'آحاد';
+                                      return (
+                                        <div key={dIdx} className="flex flex-col-reverse items-center w-8 h-full relative">
+                                          <div className="w-1 h-20 bg-slate-400 absolute bottom-1 rounded-full"></div>
+                                          
+                                          {/* Colorful Beads stack */}
+                                          <div className="flex flex-col-reverse gap-0.5 z-10 bottom-1 absolute">
+                                            {Array.from({ length: count }).map((_, bIdx) => (
+                                              <span key={bIdx} className="w-5 h-2 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full border border-blue-400 block shadow-sm"></span>
+                                            ))}
+                                          </div>
+                                          
+                                          <span className="text-[9px] text-gray-400 font-bold absolute -top-4">{name}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              <div className="flex-1 space-y-2">
+                                <p className="text-sm font-black text-gray-700">{item.label}</p>
+                                <div className="text-xs font-bold text-gray-500">
+                                  الإجابة الصحيحة: <span className="font-mono text-green-700 font-black">{showAnswers ? item.val : '....................'}</span>
+                                </div>
                               </div>
                             </div>
-                          ) : q.diagramImg === 'placevalue' ? (
-                            <div className="w-full h-full flex divide-x divide-x-reverse divide-gray-200">
-                              <div className="flex-1 flex flex-col items-center justify-center bg-teal-50/50 text-[10px] font-black text-teal-800">الألوف</div>
-                              <div className="flex-1 flex flex-col items-center justify-center bg-blue-50/50 text-[10px] font-black text-blue-800">المئات</div>
-                              <div className="flex-1 flex flex-col items-center justify-center bg-amber-50/50 text-[10px] font-black text-amber-800">العشرات</div>
-                              <div className="flex-1 flex flex-col items-center justify-center bg-purple-50/50 text-[10px] font-black text-purple-800">الآحاد</div>
+                          );
+                        })}
+                        
+                        {/* Companion Place-Value/Equations Fills */}
+                        <div className="space-y-2 pr-2">
+                          {q.fills?.map((f, fIdx) => (
+                            <div key={fIdx} className="text-sm font-bold text-gray-700 flex items-center justify-between">
+                              <span>({fIdx + 1}) {f.text}</span>
+                              {showAnswers && <span className="text-green-700 font-black bg-green-50 px-2 py-0.5 rounded border border-green-200">[{f.correct}]</span>}
                             </div>
-                          ) : (
-                            <div className="w-24 h-24 rounded-full border-4 border-orange-400 flex items-center justify-center relative">
-                              {/* Clock hands */}
-                              <span className="absolute w-1 h-8 bg-slate-800 origin-bottom bottom-12 rounded"></span>
-                              <span className="absolute h-1 w-10 bg-blue-600 origin-left left-12 rounded"></span>
-                              <span className="absolute w-2 h-2 bg-red-500 rounded-full"></span>
-                            </div>
-                          )}
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-                          {/* Points overlays */}
-                          {q.labels.map(l => (
-                            <span
-                              key={l.id}
-                              className="absolute bg-green-500 border border-white text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black"
-                              style={{ left: `${l.x}%`, top: `${l.y}%` }}
-                            >
-                              {l.id}
-                            </span>
+                    {/* 4. Multiplication & Division Grids Rendering */}
+                    {q.type === 'mult_div_grids' && (
+                      <div className="space-y-6 pr-4">
+                        {/* Multiplication math boxes */}
+                        <div className="grid grid-cols-2 gap-4">
+                          {q.multBoxes?.map((box, bIdx) => (
+                            <div key={bIdx} className="flex items-center gap-2 p-2 bg-amber-50/20 border border-amber-100 rounded-xl">
+                              <span className="text-sm font-bold font-mono">{box.text}</span>
+                              {showAnswers && <span className="text-xs font-black text-green-700 bg-green-50 px-1.5 py-0.5 rounded">[{box.correct}]</span>}
+                            </div>
                           ))}
                         </div>
 
-                        {/* Labels lines */}
-                        <div className="grid grid-cols-2 gap-4 w-full max-w-sm text-xs font-bold text-gray-500">
-                          {q.labels.map(l => (
-                            <div key={l.id} className="flex items-center gap-2">
-                              <span>({l.id})</span>
-                              <span className="flex-1 border-b border-gray-200 border-dotted h-4"></span>
+                        {/* Division Grid Table & Sidebar Box */}
+                        <div className="grid grid-cols-3 gap-6 items-center">
+                          {/* Division Grid Table */}
+                          <div className="col-span-2 space-y-2">
+                            <p className="text-xs text-gray-500 font-black">جدول القسمة الدوري:</p>
+                            <div className="border border-gray-300 rounded-xl overflow-hidden shadow-sm">
+                              <table className="w-full text-center border-collapse">
+                                <thead>
+                                  <tr className="bg-gray-100 border-b border-gray-300">
+                                    <th className="py-2 px-1 border-r border-gray-300 font-black text-xs text-gray-600">المقسوم</th>
+                                    {q.divGrid?.dividends.map((dividend, dIdx) => (
+                                      <td key={dIdx} className="py-2 border-r border-gray-300 font-mono font-bold text-sm bg-amber-50/10">{dividend}</td>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr className="border-t border-gray-300">
+                                    <th className="py-2 px-1 border-r border-gray-300 font-black text-xs text-gray-600 bg-blue-50/20">{q.divGrid?.divisor}</th>
+                                    {q.divGrid?.quotients.map((quotient, qIdx) => (
+                                      <td key={qIdx} className="py-2 border-r border-gray-300 font-mono font-bold text-sm text-blue-700">
+                                        {showAnswers ? quotient : '.....'}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+
+                          {/* Side Choices Box */}
+                          <div className="p-3 bg-purple-50/30 border border-purple-100 rounded-xl space-y-2">
+                            <p className="text-[10px] text-purple-900 font-black">اختر العدد المناسب وضعه في [ ] :</p>
+                            {q.sideMatch?.map((sm, smIdx) => (
+                              <div key={smIdx} className="text-xs font-bold text-gray-600 space-y-1">
+                                <div className="flex justify-between items-center bg-white p-1 rounded border border-gray-100">
+                                  <span>الخيارات: ({sm.val1})</span>
+                                  <span className="text-blue-700 font-bold">{sm.equation}</span>
+                                </div>
+                                {showAnswers && <span className="text-[10px] text-green-700 font-black bg-green-50 px-1 rounded">الجواب: [{sm.correct}]</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 5. MCQ & Fill Blanks Rendering */}
+                    {q.type === 'mcq_fill_blank' && (
+                      <div className="space-y-6 pr-4">
+                        {/* Multiple Choices */}
+                        <div className="space-y-3">
+                          <p className="text-xs text-gray-500 font-black border-r-2 border-purple-500 pr-2">أولاً: اختر البديل الصحيح من بين البدائل الثلاثة:</p>
+                          {q.mcqs?.map((mcq, mIdx) => (
+                            <div key={mIdx} className="text-sm font-bold text-gray-700 space-y-1.5">
+                              <div className="flex justify-between">
+                                <span>({mIdx + 1}) {mcq.text}</span>
+                                {showAnswers && <span className="text-green-700 font-black bg-green-50 px-1.5 rounded text-xs">[{mcq.correct}]</span>}
+                              </div>
+                              <div className="flex gap-6 pr-4 text-xs font-semibold text-gray-500">
+                                {mcq.options.map((opt, oIdx) => (
+                                  <label key={oIdx} className="flex items-center gap-1.5 cursor-pointer">
+                                    <span className="w-4 h-4 rounded-full border border-gray-300 flex items-center justify-center text-[10px] bg-white">
+                                      {oIdx === 0 ? 'أ' : oIdx === 1 ? 'ب' : 'ج'}
+                                    </span>
+                                    <span>{opt}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Fill blanks */}
+                        <div className="space-y-3">
+                          <p className="text-xs text-gray-500 font-black border-r-2 border-orange-500 pr-2">ثانياً: أكمل العبارات الحسابية بالفراغ المناسب:</p>
+                          {q.fills?.map((f, fIdx) => (
+                            <div key={fIdx} className="text-sm font-bold text-gray-700 flex justify-between items-center">
+                              <span>({fIdx + 1}) {f.text}</span>
+                              {showAnswers && <span className="text-green-700 font-black bg-green-50 px-1.5 rounded text-xs">[{f.correct}]</span>}
                             </div>
                           ))}
                         </div>
@@ -1136,7 +1459,17 @@ export default function WorksheetGenerator({
                 <span>علامة مائية موثقة للمناهج الإلكترونية</span>
               </div>
             </div>
-          ))}
+            {pIdx < generatedPages.length - 1 && (
+              <div className="no-print my-6 flex items-center justify-center gap-4 py-2 select-none">
+                <div className="h-0.5 flex-1 border-t-2 border-dashed border-gray-300"></div>
+                <span className="bg-gray-100 text-gray-500 text-xs px-3 py-1 rounded-full font-bold border border-gray-200 shadow-sm">
+                  ✂️ فاصل صفحات A4 (سيتم فصلها تلقائياً عند الطباعة)
+                </span>
+                <div className="h-0.5 flex-1 border-t-2 border-dashed border-gray-300"></div>
+              </div>
+            )}
+          </Fragment>
+        ))}
         </div>
       </div>
     </div>
